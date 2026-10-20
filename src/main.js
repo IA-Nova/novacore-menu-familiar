@@ -4,11 +4,14 @@ import './styles/layout.css';
 import './styles/components.css';
 import './styles/auth.css';
 import './styles/adminImport.css';
+import './styles/suggestions.css';
 import { pageLayout } from './components/layout.js';
 import { routeFromHash, needsCalendarRedirect } from './utils/navigationRoutes.js';
 import { renderCalendar } from './pages/calendar.js';
 import { renderWishes } from './pages/wishes.js';
 import { renderRecipes, visibleRecipeDishes } from './pages/recipes.js';
+import { renderSuggestions } from './pages/suggestions.js';
+import { pickFamilySuggestion } from './utils/dishSuggestions.js';
 import { renderAdmin } from './pages/admin.js';
 import { renderProfile } from './pages/profile.js';
 import { renderLogin, renderRegister, renderGate } from './pages/access.js';
@@ -42,6 +45,7 @@ const state = {
   familyUsers: [], adminUsers: [], dishes: [], dishVotes: {}, dishVotesLoaded: false, voteBusyDishId: null, wishes: [], cycle: null,
   calendarView: 'week', weekIndex: 0, cycleOffset: 0,
   recipeQuery: '', recipeFilter: 'all', recipeView: 'cards', recipeTags: [], recipeMatchMode: 'all', recipeSort: 'az', recipePageSize: 24,
+  suggestionTags: [], suggestionMatchMode: 'all', suggestionDishId: null,
   recipeEditor: null, recipeDetailId: null, recipePhotoFile: null, recipeDraft: null, recipeNotice: '',
   wishDraft: null, wishSearch: '', wishNotice: '',
   calendarMode: 'meal', calendarOrganizeSource: null, calendarOrganizeRevision: null, calendarEditor: null, calendarNotice: '', templateDraft: null,
@@ -72,6 +76,7 @@ function disconnectFamily() {
   state.backupPreview = null; state.backupBusy = false; state.backupProgress = ''; state.backupError = ''; state.backupFileName = '';
   state.recentCycles = []; state.historyLoading = false; state.historyError = '';
   state.dishImportOpen = false; state.dishImportText = ''; state.dishImportPreview = null; state.dishImportBusy = false; state.dishImportError = ''; state.dishImportMessage = '';
+  state.suggestionTags = []; state.suggestionMatchMode = 'all'; state.suggestionDishId = null;
 }
 function routeName() { return routeFromHash(location.hash); }
 function ensureCalendarUrl() {
@@ -147,10 +152,11 @@ function connectFamily() {
   }
   connectSelectedCycle();
 }
-const titles = { calendario: 'Calendario', antojos: 'Antojos', recetario: 'Recetario', administracion: 'Administración', perfil: 'Mi perfil' };
+const titles = { calendario: 'Calendario', antojos: 'Antojos', recetario: 'Recetario', sugerencias: '¿Qué comemos hoy?', administracion: 'Administración', perfil: 'Mi perfil' };
 const renderers = {
   calendario: () => renderCalendar(state),
   antojos: () => renderWishes(state), recetario: () => renderRecipes(state),
+  sugerencias: () => renderSuggestions(state),
   administracion: () => renderAdmin(state), perfil: () => renderProfile(state),
 };
 function render({ scroll = false, focusSearch = false } = {}) {
@@ -164,6 +170,7 @@ function render({ scroll = false, focusSearch = false } = {}) {
   const route = renderers[requested] && (requested !== 'administracion' || state.profile.role === 'admin') ? requested : 'calendario';
   app.innerHTML = pageLayout(route, renderers[route](), { ...state.profile, familyName: state.config?.familyName });
   if (route === 'recetario') void loadRecipeThumbnails();
+  if (route === 'sugerencias' && state.suggestionDishId) void loadThumbnailIds([state.suggestionDishId]);
   document.title = `${titles[route]} | NovaCore Menú Familiar`;
   if (focusSearch && route === 'recetario') {
     const input = document.getElementById('recipe-search');
@@ -252,6 +259,45 @@ document.addEventListener('click', async (event) => {
       await refreshAdminHistory();
     } catch (error) { state.notice = translateAuthError(error); }
     render(); return;
+  }
+  if (action === 'suggestion-tag') {
+    const tag = normalizeText(value);
+    if (!tag) return;
+    state.suggestionTags = state.suggestionTags.some(item => normalizeText(item) === tag)
+      ? state.suggestionTags.filter(item => normalizeText(item) !== tag)
+      : [...state.suggestionTags, tag];
+    state.suggestionDishId = null; render(); return;
+  }
+  if (action === 'suggestion-clear') {
+    state.suggestionTags = []; state.suggestionMatchMode = 'all'; state.suggestionDishId = null;
+    render(); return;
+  }
+  if (action === 'suggestion-match' && ['all', 'any'].includes(value)) {
+    state.suggestionMatchMode = value; state.suggestionDishId = null;
+    render(); return;
+  }
+  if (action === 'suggestion-generate') {
+    if (!state.dishVotesLoaded || !(state.familyUsers || []).some(u => u.uid === state.user?.uid && u.status === 'active')) return;
+    const choice = pickFamilySuggestion({ dishes: state.dishes, tags: state.suggestionTags,
+      matchMode: state.suggestionMatchMode, votesByDish: state.dishVotes,
+      familyUsers: state.familyUsers, previousId: state.suggestionDishId });
+    state.suggestionDishId = choice?.dish.id || null;
+    render(); return;
+  }
+  if (action === 'suggestion-view-dish') {
+    const dish = state.dishes.find(item => item.id === value && item.status === 'active');
+    if (!dish || dish.id !== state.suggestionDishId) return;
+    state.recipeEditor = null; state.recipeDetailId = dish.id; state.fullDishPhoto = null;
+    location.hash = '#/recetario';
+    if (dish.hasPhoto) {
+      try {
+        const photo = await getFullPhoto(dish.id);
+        if (state.recipeDetailId === dish.id && routeName() === 'recetario') {
+          state.fullDishPhoto = { id: dish.id, photo }; render();
+        }
+      } catch { /* Si falta foto grande, se muestra la miniatura. */ }
+    }
+    return;
   }
   if (action === 'dish-vote' && ['like', 'dislike'].includes(button.dataset.vote)) {
     const dish = state.dishes.find(item => item.id === value);

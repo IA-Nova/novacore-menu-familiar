@@ -11,7 +11,7 @@ test('la raíz abre directamente Calendario', () => {
   }
 });
 test('las rutas funcionales permanecen sin cambios', () => {
-  for (const route of ['calendario', 'antojos', 'recetario', 'administracion', 'perfil', 'registro']) {
+  for (const route of ['calendario', 'antojos', 'recetario', 'sugerencias', 'administracion', 'perfil', 'registro']) {
     assert.equal(routeFromHash(`#/${route}`), route);
     assert.equal(needsCalendarRedirect(`#/${route}`), false);
   }
@@ -26,8 +26,8 @@ test('Inicio se elimina de la navegación y el logotipo enlaza a Calendario', ()
   assert.match(layout, /href="#\/calendario" class="brand"/);
   assert.match(layout, /href="#\/calendario" class="mobile-brand"/);
 });
-test('la navegación móvil queda distribuida en tres columnas', () => {
-  assert.match(read('src/styles/layout.css'), /grid-template-columns:repeat\(3,minmax\(0,1fr\)\)/);
+test('la navegación móvil presenta cuatro secciones', () => {
+  assert.match(read('src/styles/layout.css'), /grid-template-columns:repeat\(4,minmax\(0,1fr\)\)/);
 });
 test('la vista Inicio no se importa ni queda habilitada como renderer', () => {
   const main = read('src/main.js');

@@ -5,6 +5,7 @@ const items = [
   { route: 'calendario', label: 'Calendario', icon: 'calendar' },
   { route: 'antojos', label: 'Antojos', icon: 'heart' },
   { route: 'recetario', label: 'Recetario', icon: 'book' },
+  { route: 'sugerencias', label: 'Sugerencias', icon: 'shuffle' },
 ];
 
 export function pageLayout(route, content, profile = {}) {

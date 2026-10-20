@@ -13,6 +13,7 @@ const paths = {
   chevronUp: '<path d="m18 15-6-6-6 6"/>',
   chevronDown: '<path d="m6 9 6 6 6-6"/>',
   search: '<circle cx="10.8" cy="10.8" r="6.8"/><path d="m16 16 5 5"/>',
+  shuffle: '<path d="m18 14 4 4-4 4M18 2l4 4-4 4M2 18h2.7c3.5 0 4.7-2.2 7.1-6s3.6-6 7-6H22M2 6h2.7c1.9 0 3.1.7 4.2 2.1M14.5 15.9c1.3 1.5 2.6 2.1 4.3 2.1H22"/>',
   plus: '<path d="M12 5v14M5 12h14"/>',
   check: '<path d="m5 12 4 4L19 6"/>',
   clock: '<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>',

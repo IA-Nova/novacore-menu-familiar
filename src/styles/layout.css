@@ -29,8 +29,8 @@
   .sidebar{display:none;} .topbar{justify-content:space-between; height:72px; padding:0 19px; } .mobile-brand{display:flex; padding:0; gap:9px;}
   .mobile-brand .brand-logo{width:38px;height:38px;border-radius:12px;} .mobile-brand strong{font-size:1.05rem;} .mobile-brand small{font-size:.68rem;}
   .topbar-family{display:none;} .main-content{padding:20px 16px 116px;} .demo-notice{margin-bottom:25px;}
-  .bottom-nav{display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); align-items:stretch; position:fixed; bottom:0; left:0; right:0; background:white; border-top:1px solid var(--color-border); padding:7px 4px max(9px,env(safe-area-inset-bottom)); z-index:20; box-shadow:0 -8px 25px rgba(40,30,50,.03);}
-  .bottom-nav .nav-item{display:flex; flex-direction:column; justify-content:center; gap:4px; padding:9px 4px 5px; font-size:.67rem; border-radius:10px; }
+  .bottom-nav{display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); align-items:stretch; position:fixed; bottom:0; left:0; right:0; background:white; border-top:1px solid var(--color-border); padding:7px 4px max(9px,env(safe-area-inset-bottom)); z-index:20; box-shadow:0 -8px 25px rgba(40,30,50,.03);}
+  .bottom-nav .nav-item{display:flex; flex-direction:column; justify-content:center; gap:4px; padding:9px 2px 5px; font-size:.64rem; border-radius:10px; }
   .bottom-nav .nav-item.active{background:transparent; color:var(--color-primary);} .bottom-nav .nav-item.active svg{stroke-width:2.5;}
   .page-heading{margin-bottom:21px;} h1{font-size:1.85rem;}
 }
