@@ -82,3 +82,17 @@ test('visualiza un día saludable heredado como Libre, sin perder su comida', ()
   assert.match(text, /Libre/);
   assert.match(text, /Editar comida/);
 });
+
+test('el calendario muestra las indicaciones del antojo para quien cocina', () => {
+  const day = cycle.days.find(d => d.type === 'wish');
+  assert.ok(day);
+  const wishCycle = { ...cycle, days: cycle.days.map(d => d.date === day.date ?
+    { ...d, type: 'wish', wishUserId: 'ana', healthyDishes: [] } : d) };
+  const view = renderCalendar({ ...base, cycle: wishCycle,
+    wishes: [{ userId: 'ana', status: 'selected',
+      dishes: [{ dishId: 'pambazo', nameSnapshot: 'Pambazos' }],
+      note: 'Preparar con tinga <pollo>' }] });
+  assert.match(view, /Indicaciones de preparación/);
+  assert.match(view, /Preparar con tinga &lt;pollo&gt;/);
+  assert.doesNotMatch(view, /<pollo>/);
+});

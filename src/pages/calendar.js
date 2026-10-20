@@ -63,6 +63,7 @@ export function renderCalendar(state) {
       <span class="pill ${day.type === 'wish' ? 'wish' : 'free'}">${icon(day.type === 'wish' ? 'heart' : 'utensils', 15)} ${dayNames[day.type]}</span></div>
       ${photoMosaic}
       <h3>${h(meal.title)}</h3><p>${h(meal.description)}</p>
+      ${wish?.status === 'selected' && wish.note ? `<div class="wish-preparation-note" role="note"><strong>Indicaciones de preparación</strong><p>${h(wish.note)}</p></div>` : ''}
       ${day.date === currentMexicoDate() ? '<span class="today-tag">Hoy</span>' : ''}
       ${admin && hasStoredCycle ? (state.calendarMode === 'organize' ? `<button type="button" class="btn btn-outline btn-small calendar-day-button" data-action="calendar-day-select" data-value="${day.date}">${daySelected ? 'Origen seleccionado' : state.calendarOrganizeSource ? 'Intercambiar con este día' : 'Seleccionar día'}</button><button type="button" class="btn btn-outline btn-small calendar-day-button" data-action="calendar-day-edit" data-value="${day.date}">Tipo y asignación</button>` : (isFreeDay(day.type) ? `<button type="button" class="btn btn-outline btn-small calendar-day-button" data-action="calendar-day-edit" data-value="${day.date}">Editar comida</button>` : '')) : ''}
     </article>`;

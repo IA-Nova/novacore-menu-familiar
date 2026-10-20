@@ -66,18 +66,15 @@ service cloud.firestore {
       return !d.hasPhoto || (existsAfter(photoPath(id)) && existsAfter(thumbnailPath(id)));
     }
     function canChangeDish(id) {
-      return isAdmin() || (isActive() && resource.data.createdBy == request.auth.uid &&
-        resource.data.approvedForHealthyMenu == false &&
-        resource.data.status == 'active' &&
-        request.resource.data.approvedForHealthyMenu == false &&
-        request.resource.data.status == resource.data.status);
+      return isAdmin() || (isActive() && resource.data.status == 'active' &&
+        request.resource.data.status == resource.data.status &&
+        request.resource.data.approvedForHealthyMenu == resource.data.approvedForHealthyMenu);
     }
     function canWriteDishImage(id) {
       return isActive() && existsAfter(/databases/$(database)/documents/dishes/$(id)) &&
         getAfter(/databases/$(database)/documents/dishes/$(id)).data.hasPhoto == true &&
         (getAfter(/databases/$(database)/documents/dishes/$(id)).data.status == 'active' || isAdmin()) &&
-        (isAdmin() || (getAfter(/databases/$(database)/documents/dishes/$(id)).data.createdBy == request.auth.uid &&
-          getAfter(/databases/$(database)/documents/dishes/$(id)).data.approvedForHealthyMenu == false));
+        (isAdmin() || getAfter(/databases/$(database)/documents/dishes/$(id)).data.status == 'active');
     }
     function validImage(id, thumb) {
       let d = request.resource.data;

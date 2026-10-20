@@ -32,3 +32,22 @@ test('miembro no puede abrir ciclo, pero administrador sí', () => {
   state.profile.role = 'member';
   assert.doesNotMatch(renderWishes(state), /Abrir selección de antojos/);
 });
+
+test('una nota de preparación es visible para toda la familia y se escapa HTML', () => {
+  const state = model();
+  state.wishes = [{ userId: 'admin-uid', status: 'selected',
+    dishes: [{ dishId: 'pambazo', nameSnapshot: 'Pambazos' }],
+    note: 'Preparar versión de tinga <sin picante>' }];
+  const page = renderWishes(state);
+  assert.match(page, /Indicaciones de preparación/);
+  assert.match(page, /Preparar versión de tinga &lt;sin picante&gt;/);
+  assert.doesNotMatch(page, /<sin picante>/);
+});
+test('el formulario explica que las notas son para quien prepara el antojo', () => {
+  const state = model();
+  state.wishDraft = { selection: ['pambazo'], note: 'Preparar la versión de tinga', newNames: {} };
+  state.dishes = [{ id: 'pambazo', name: 'Pambazos', status: 'active' }];
+  const page = renderWishes(state);
+  assert.match(page, /Indicaciones para preparar el antojo/);
+  assert.match(page, /Preparar la versión de tinga/);
+});

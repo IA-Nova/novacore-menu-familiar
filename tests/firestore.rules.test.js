@@ -13,8 +13,9 @@ before(async () => {
     const seed = [
       ['admin-uid', 'admin', 'Administrador', 'admin', 'active'],
       ['active-uid', 'ana', 'Ana', 'member', 'active'],
+      ['other-active-uid', 'maria', 'María', 'member', 'active'],
       ['pending-uid', 'luis', 'Luis', 'member', 'pending'],
-      ['approval-uid', 'sofia', 'Sofia', 'member', 'pending'],
+      ['approval-uid', 'sofia', 'Sofía', 'member', 'pending'],
       ['disabled-uid', 'pepe', 'Pepe', 'member', 'disabled'],
     ];
     for (const [uid, username, displayName, role, status] of seed) {
@@ -60,23 +61,14 @@ test('usuario nuevo sólo puede crear su propio perfil pending', async () => {
   await assertFails(setDoc(doc(db, 'users', 'other-uid'), data));
   await assertFails(setDoc(doc(db, 'users', 'new-uid'), { ...data, role: 'admin' }));
 });
-
 test('admin aprueba pero miembro no puede aprobar a otros', async () => {
   const admin = authUser('admin-uid', 'admin@users.novacore');
   const member = authUser('active-uid', 'ana@users.novacore');
-
-  await assertFails(updateDoc(doc(member, 'users', 'approval-uid'), {
-    status: 'active'
-  }));
-
+  await assertFails(updateDoc(doc(member, 'users', 'approval-uid'), { status: 'active' }));
   await assertSucceeds(updateDoc(doc(admin, 'users', 'approval-uid'), {
-    status: 'active',
-    approvedAt: serverTimestamp(),
-    approvedBy: 'admin-uid',
-    updatedAt: serverTimestamp(),
+    status: 'active', approvedAt: serverTimestamp(), approvedBy: 'admin-uid', updatedAt: serverTimestamp(),
   }));
 });
-
 test('activos solo consultan integrantes activos; pendientes ven su perfil', async () => {
   const db = authUser('active-uid', 'ana@users.novacore');
   await assertSucceeds(getDocs(query(collection(db, 'users'), where('status', '==', 'active'))));
@@ -107,11 +99,17 @@ test('administrador puede marcar Saludable al crear un platillo, no un miembro',
     ...dishDocument('active-uid', 'Mortadela'), approvedForHealthyMenu: true,
   }));
 });
-test('autor edita sólo platillo propio no aprobado; otros no', async () => {
+test('miembros activos editan recetas compartidas sin controlar clasificación ni archivo', async () => {
   const owner = authUser('active-uid','ana@users.novacore');
-  const other = authUser('pending-uid','luis@users.novacore');
+  const other = authUser('other-active-uid','maria@users.novacore');
+  const pending = authUser('pending-uid','luis@users.novacore');
+  const disabled = authUser('disabled-uid','pepe@users.novacore');
   await assertSucceeds(updateDoc(doc(owner, 'dishes', 'd1'), { name: 'Arroz integral', searchName: 'arroz integral', updatedAt: serverTimestamp() }));
-  await assertFails(updateDoc(doc(other, 'dishes', 'd1'), { name: 'Modificado', updatedAt: serverTimestamp() }));
+  await assertSucceeds(updateDoc(doc(other, 'dishes', 'd1'), { name: 'Arroz casero', searchName: 'arroz casero', tags: ['postre'], updatedAt: serverTimestamp() }));
+  await assertFails(updateDoc(doc(pending, 'dishes', 'd1'), { name: 'Modificado', updatedAt: serverTimestamp() }));
+  await assertFails(updateDoc(doc(disabled, 'dishes', 'd1'), { name: 'Modificado', updatedAt: serverTimestamp() }));
+  await assertFails(updateDoc(doc(other, 'dishes', 'd1'), { createdBy: 'other-active-uid', updatedAt: serverTimestamp() }));
+  await assertFails(updateDoc(doc(other, 'dishes', 'd1'), { createdAt: serverTimestamp(), updatedAt: serverTimestamp() }));
   await assertFails(updateDoc(doc(owner, 'dishes', 'd1'), { status: 'archived', updatedAt: serverTimestamp() }));
   await assertFails(updateDoc(doc(owner, 'dishes', 'd1'), { approvedForHealthyMenu: true, updatedAt: serverTimestamp() }));
 });
@@ -119,8 +117,12 @@ test('admin aprueba como saludable y archiva; autor pierde edición', async () =
   const admin = authUser('admin-uid','admin@users.novacore');
   const owner = authUser('active-uid','ana@users.novacore');
   await assertSucceeds(updateDoc(doc(admin, 'dishes', 'd1'), { approvedForHealthyMenu: true, updatedAt: serverTimestamp() }));
-  await assertFails(updateDoc(doc(owner, 'dishes', 'd1'), { name: 'Otro nombre', updatedAt: serverTimestamp() }));
+  await assertSucceeds(updateDoc(doc(owner, 'dishes', 'd1'), { name: 'Otro nombre', searchName: 'otro nombre', updatedAt: serverTimestamp() }));
+  const other = authUser('other-active-uid','maria@users.novacore');
+  await assertSucceeds(updateDoc(doc(other, 'dishes', 'd1'), { description: 'Versión familiar', updatedAt: serverTimestamp() }));
+  await assertFails(updateDoc(doc(other, 'dishes', 'd1'), { approvedForHealthyMenu: false, updatedAt: serverTimestamp() }));
   await assertSucceeds(updateDoc(doc(admin, 'dishes', 'd1'), { status: 'archived', updatedAt: serverTimestamp() }));
+  await assertFails(updateDoc(doc(other, 'dishes', 'd1'), { description: 'No autorizada', updatedAt: serverTimestamp() }));
   await assertSucceeds(updateDoc(doc(admin, 'dishes', 'd1'), { status: 'active', updatedAt: serverTimestamp() }));
 });
 test('imagen y miniatura requieren lote atómico, límites, autor y platillo activo', async () => {
@@ -139,6 +141,28 @@ test('imagen y miniatura requieren lote atómico, límites, autor y platillo act
   await assertFails(updateDoc(doc(owner, 'dishPhotos','dphoto'), { base64: 'a'.repeat(164000), updatedAt: serverTimestamp() }));
   const stranger = authUser('pending-uid','luis@users.novacore');
   await assertFails(updateDoc(doc(stranger, 'dishPhotos','dphoto'), { base64: 'AAAA', updatedAt: serverTimestamp() }));
+});
+test('integrante activo reemplaza foto de receta ajena aprobada sin cambiar Saludable', async () => {
+  const admin = authUser('admin-uid', 'admin@users.novacore');
+  const member = authUser('other-active-uid', 'maria@users.novacore');
+  await assertSucceeds(setDoc(doc(admin, 'dishes', 'foto-compartida'), {
+    ...dishDocument('admin-uid', 'Nopales'), approvedForHealthyMenu: true,
+  }));
+  const image = (thumb = false) => ({ dishId: 'foto-compartida', mimeType: 'image/jpeg',
+    base64: 'AAAA', width: thumb ? 100 : 400, height: thumb ? 100 : 400,
+    sizeBytes: 3, updatedAt: serverTimestamp() });
+  const batch = writeBatch(member);
+  batch.update(doc(member, 'dishes', 'foto-compartida'), { hasPhoto: true, updatedAt: serverTimestamp() });
+  batch.set(doc(member, 'dishPhotos', 'foto-compartida'), image());
+  batch.set(doc(member, 'dishThumbnails', 'foto-compartida'), image(true));
+  await assertSucceeds(batch.commit());
+  await assertFails(updateDoc(doc(member, 'dishes', 'foto-compartida'), {
+    approvedForHealthyMenu: false, updatedAt: serverTimestamp(),
+  }));
+  const pending = authUser('disabled-uid', 'pepe@users.novacore');
+  await assertFails(updateDoc(doc(pending, 'dishPhotos', 'foto-compartida'), {
+    base64: 'AAAA', updatedAt: serverTimestamp(),
+  }));
 });
 function wishData(uid, dishId = 'wish-dish', name = 'Papas a la francesa') {
   return { userId: uid, status: 'selected',

@@ -443,7 +443,7 @@ document.addEventListener('click', async (event) => {
   if (action === 'dish-edit') {
     const dish = state.dishes.find(d => d.id === value);
     if (!dish || !(state.profile.role === 'admin' ||
-      (dish.createdBy === state.user.uid && !dish.approvedForHealthyMenu))) return;
+      (state.profile.status === 'active' && dish.status === 'active'))) return;
     state.recipeEditor = dish.id; state.recipeDetailId = null; state.recipePhotoFile = null; state.recipeDraft = null;
     render(); document.getElementById('dish-name')?.focus(); return;
   }

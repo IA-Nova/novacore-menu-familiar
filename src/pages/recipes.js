@@ -9,8 +9,9 @@ const photoBlock = (photo, name) => {
   const src = asDataUri(photo);
   return src ? `<img class="dish-photo" loading="lazy" src="${src}" alt="Fotografía de ${h(name)}">` : emptyIllustration();
 };
-const canEdit = (dish, state) => state.profile.role === 'admin' ||
-  (dish.createdBy === state.user?.uid && !dish.approvedForHealthyMenu);
+// Las recetas activas son colaborativas; solo el admin gestiona la clasificación saludable y el archivo.
+const canEdit = (dish, state) => state.profile?.role === 'admin' ||
+  (state.profile?.status === 'active' && dish.status === 'active');
 const authorName = (dish, state) => state.familyUsers.find(u => u.uid === dish.createdBy)?.displayName || 'Integrante de la familia';
 function dishForm(dish, isNew = false, selectedFile = null, admin = false) {
   const value = key => h(dish?.[key] ?? '');
@@ -25,7 +26,7 @@ function dishForm(dish, isNew = false, selectedFile = null, admin = false) {
     <form data-form="dish" class="dish-form"><div class="dish-field"><label for="dish-name">Nombre del platillo *</label><input required maxlength="100" id="dish-name" name="name" placeholder="Ej. Arroz rojo" value="${value('name')}"></div>
     <div class="dish-field"><label for="dish-photo">Foto (opcional)</label><input id="dish-photo" name="photo" type="file" accept="image/jpeg,image/png,image/webp" ><small id="dish-photo-status">${selectedFile ? h(selectedFile.name) : dish?.hasPhoto ? 'Puedes elegir una foto nueva para reemplazar la actual.' : 'Desde tu teléfono puedes elegir una foto o abrir la cámara.'}</small></div>
     <fieldset class="dish-categories"><legend>Clasificación</legend>
-      ${admin ? `<label class="dish-choice"><input type="checkbox" name="approvedForHealthyMenu" ${healthyChecked ? 'checked' : ''}><span>Saludable</span></label>` : ''}
+      ${admin ? `<label class="dish-choice"><input type="checkbox" name="approvedForHealthyMenu" ${healthyChecked ? 'checked' : ''}><span>Saludable</span></label>` : healthyChecked ? '<span class="pill healthy">Saludable</span>' : ''}
       <label class="dish-choice"><input type="checkbox" name="tagPostre" ${hasTag('postre') ? 'checked' : ''}><span>Postre</span></label>
       <label class="dish-choice"><input type="checkbox" name="tagBebida" ${hasTag('bebida') ? 'checked' : ''}><span>Bebida</span></label>
     </fieldset>

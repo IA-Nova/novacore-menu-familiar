@@ -257,3 +257,38 @@ test('main.js permite añadir y retirar múltiples etiquetas, limpiar y cambiar 
   assert.match(main, /action === 'recipe-match-mode'/);
   assert.match(main, /event\.target\.id === 'recipe-sort'/);
 });
+
+test('edición compartida aparece en la ficha de recetas activas sin dar permisos administrativos', () => {
+  const state = { profile: { role: 'member', status: 'active' }, user: { uid: 'maria' },
+    dishes: [{ id: 'tinga', name: 'Tinga de pollo', status: 'active',
+      createdBy: 'ana', approvedForHealthyMenu: true, tags: [] }],
+    familyUsers: [], recipePageSize: 24, recipeQuery: '', recipeFilter: 'all',
+    recipeSort: 'az', recipeView: 'cards', recipeDetailId: 'tinga', thumbnails: {} };
+  const page = renderRecipes(state);
+  assert.match(page, /data-action="dish-edit"/);
+  assert.doesNotMatch(page, /data-action="dish-healthy"/);
+  assert.doesNotMatch(page, /data-action="dish-archive"/);
+});
+test('recetas archivadas no pueden editarse por miembros, aunque estén visibles', () => {
+  const state = { profile: { role: 'member', status: 'active' }, user: { uid: 'maria' },
+    dishes: [{ id: 'archivada', name: 'Archivo', status: 'archived',
+      createdBy: 'ana', approvedForHealthyMenu: false, tags: [] }],
+    familyUsers: [], recipePageSize: 24, recipeQuery: '', recipeFilter: 'archived',
+    recipeSort: 'az', recipeView: 'cards', recipeDetailId: 'archivada', thumbnails: {} };
+  const page = renderRecipes(state);
+  assert.doesNotMatch(page, /data-action="dish-edit"/);
+});
+
+test('editor de receta saludable ajena mantiene visible su etiqueta sin permitir cambiarla', () => {
+  const state = { profile: { role: 'member', status: 'active' }, user: { uid: 'maria' },
+    dishes: [{ id: 'tinga', name: 'Tinga de pollo', status: 'active',
+      createdBy: 'ana', approvedForHealthyMenu: true, tags: ['casero'], description: 'Receta casera' }],
+    familyUsers: [], recipePageSize: 24, recipeQuery: '', recipeFilter: 'all',
+    recipeSort: 'az', recipeView: 'cards', recipeEditor: 'tinga', recipeDetailId: null,
+    recipeNotice: '', thumbnails: {} };
+  const page = renderRecipes(state);
+  assert.match(page, /Editar platillo/);
+  assert.match(page, /<span class="pill healthy">Saludable<\/span>/);
+  assert.doesNotMatch(page, /name="approvedForHealthyMenu"/);
+  assert.match(page, /name="tags"/);
+});
