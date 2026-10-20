@@ -2,7 +2,8 @@
 import { before, after, test } from 'node:test';
 import { readFileSync } from 'node:fs';
 import { initializeTestEnvironment, assertFails, assertSucceeds } from '@firebase/rules-unit-testing';
-import { doc, getDoc, setDoc, updateDoc, deleteDoc, serverTimestamp, collection, getDocs, query, where, writeBatch } from 'firebase/firestore';
+import { doc, getDoc, setDoc, updateDoc, deleteDoc, deleteField, FieldPath, serverTimestamp, collection, getDocs, query, where, writeBatch } from 'firebase/firestore';
+import assert from 'node:assert/strict';
 let env;
 const authUser = (uid, email) => env.authenticatedContext(uid, { email }).firestore();
 before(async () => {
@@ -280,4 +281,51 @@ test('restauración: el administrador recupera selección histórica, usuario or
     createdAt: new Date('2025-01-01T00:00:00Z'), updatedAt: serverTimestamp() };
   await assertSucceeds(setDoc(doc(adminDb,'cycles/2030-11-11/wishes/active-uid'), snapshot));
   await assertFails(setDoc(doc(memberDb,'cycles/2030-11-11/wishes/admin-uid'), { ...snapshot, userId: 'admin-uid' }));
+});
+
+// Votos individuales (un documento por receta; un campo por integrante).
+test('cada miembro puede votar, cambiar, retirar su voto y consultar conteos', async () => {
+  const ana = authUser('active-uid', 'ana@users.novacore');
+  const maria = authUser('other-active-uid', 'maria@users.novacore');
+  const id = 'wish-dish';
+  const a = doc(ana, 'dishVotes', id);
+  const m = doc(maria, 'dishVotes', id);
+  await assertSucceeds(setDoc(a, { votes: { 'active-uid': 'like' }, updatedAt: serverTimestamp() }));
+  await assertSucceeds(setDoc(m, { votes: { 'other-active-uid': 'dislike' }, updatedAt: serverTimestamp() }, { merge: true }));
+  const both = (await getDoc(a)).data().votes;
+  assert.equal(both['active-uid'], 'like');
+  assert.equal(both['other-active-uid'], 'dislike');
+  await assertSucceeds(setDoc(a, { votes: { 'active-uid': 'dislike' }, updatedAt: serverTimestamp() }, { merge: true }));
+  await assertSucceeds(updateDoc(a, new FieldPath('votes', 'active-uid'), deleteField(), 'updatedAt', serverTimestamp()));
+  const after = (await getDoc(a)).data().votes;
+  assert.equal(after['active-uid'], undefined);
+  assert.equal(after['other-active-uid'], 'dislike');
+  await assertSucceeds(getDocs(collection(ana, 'dishVotes')));
+});
+test('nadie modifica votos ajenos ni vota por otras cuentas', async () => {
+  const ana = authUser('active-uid', 'ana@users.novacore');
+  const maria = authUser('other-active-uid', 'maria@users.novacore');
+  const admin = authUser('admin-uid', 'admin@users.novacore');
+  const ref = doc(ana, 'dishVotes', 'wish-dish');
+  await assertFails(updateDoc(ref, new FieldPath('votes', 'other-active-uid'), 'like', 'updatedAt', serverTimestamp()));
+  await assertFails(updateDoc(ref, new FieldPath('votes', 'other-active-uid'), deleteField(), 'updatedAt', serverTimestamp()));
+  await assertFails(setDoc(ref, { votes: { 'other-active-uid': 'like' }, updatedAt: serverTimestamp() }));
+  await assertFails(updateDoc(ref, { votes: { 'other-active-uid': 'like' }, updatedAt: serverTimestamp() }));
+  await assertFails(setDoc(doc(admin, 'dishVotes', 'wish-dish'), { votes: { 'other-active-uid': 'like' }, updatedAt: serverTimestamp() }, { merge: true }));
+  await assertFails(deleteDoc(doc(maria, 'dishVotes', 'wish-dish')));
+});
+test('votos requieren receta activa, valor válido, marca de tiempo y cuenta activa', async () => {
+  const ana = authUser('active-uid', 'ana@users.novacore');
+  const pending = authUser('pending-uid', 'luis@users.novacore');
+  const disabled = authUser('disabled-uid', 'pepe@users.novacore');
+  await assertFails(getDocs(collection(pending, 'dishVotes')));
+  await assertFails(getDoc(doc(disabled, 'dishVotes', 'wish-dish')));
+  await assertFails(setDoc(doc(pending, 'dishVotes', 'wish-dish'), { votes: { 'pending-uid': 'like' }, updatedAt: serverTimestamp() }, { merge: true }));
+  await assertFails(setDoc(doc(ana, 'dishVotes', 'no-existe'), { votes: { 'active-uid': 'like' }, updatedAt: serverTimestamp() }));
+  await assertFails(setDoc(doc(ana, 'dishVotes', 'wish-dish'), { votes: { 'active-uid': 'talvez' }, updatedAt: serverTimestamp() }));
+  await assertFails(setDoc(doc(ana, 'dishVotes', 'wish-dish'), { votes: { 'active-uid': 'like' }, updatedAt: new Date() }));
+  const admin = authUser('admin-uid','admin@users.novacore');
+  await assertSucceeds(setDoc(doc(admin, 'dishes', 'plato-archivado'), dishDocument('admin-uid', 'Platillo archivado')));
+  await assertSucceeds(updateDoc(doc(admin, 'dishes', 'plato-archivado'), { status: 'archived', updatedAt: serverTimestamp() }));
+  await assertFails(setDoc(doc(ana, 'dishVotes', 'plato-archivado'), { votes: { 'active-uid': 'like' }, updatedAt: serverTimestamp() }));
 });

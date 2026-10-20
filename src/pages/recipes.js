@@ -2,6 +2,7 @@ import { pageHeader, emptyIllustration } from '../components/layout.js';
 import { icon } from '../components/icons.js';
 import { normalizeText, escapeHtml } from '../utils/html.js';
 import { asDataUri } from '../utils/dishPhoto.js';
+import { dishVoteSummary } from '../utils/dishVotes.js';
 import { renderAdminDishImport } from './adminImport.js';
 
 const h = escapeHtml;
@@ -38,6 +39,20 @@ function dishForm(dish, isNew = false, selectedFile = null, admin = false) {
     <div class="dish-field"><label for="dish-tags">Otras etiquetas (separadas por coma)</label><input id="dish-tags" name="tags" value="${h(extraTags)}" placeholder="Ej. casero, mexicano"></div></div></details>
     <button class="btn btn-primary" type="submit">${isNew ? 'Guardar platillo' : 'Guardar cambios'}</button></form></section>`;
 }
+// Las acciones de voto quedan fuera del botón que abre una receta, para evitar botones anidados.
+function dishVoteControls(dish, state, compact = false) {
+  const { likes, dislikes, userVote } = dishVoteSummary(dish.id, state.dishVotes, state.familyUsers, state.user?.uid);
+  const busy = state.voteBusyDishId === dish.id;
+  const archived = dish.status !== 'active';
+  const loaded = state.dishVotesLoaded !== false && (state.familyUsers || []).some(u => u.uid === state.user?.uid && u.status === 'active');
+  const action = (kind, count, label) => `<button type="button" class="dish-vote-button ${userVote === kind ? 'is-voted' : ''}"
+    data-action="dish-vote" data-value="${h(dish.id)}" data-vote="${kind}"
+    aria-pressed="${userVote === kind}" aria-label="${label}: ${count}${userVote === kind ? '. Tu voto actual. Pulsa para retirarlo' : ''}"
+    ${busy || archived || !loaded ? 'disabled' : ''}>${icon(kind === 'like' ? 'thumbsUp' : 'thumbsDown', 16)}<span>${count}</span></button>`;
+  return `<div class="dish-votes ${compact ? 'dish-votes-compact' : ''}" role="group" aria-label="Opiniones de la familia sobre ${h(dish.name)}">
+    ${action('like', likes, 'Me gusta')}${action('dislike', dislikes, 'No me gusta')}${busy ? '<span class="dish-votes-pending" role="status">Guardando…</span>' : ''}
+  </div>`;
+}
 function dishDetail(dish, state) {
   return `<section class="surface-card dish-detail" id="dish-detail"><div class="section-top"><h2>${h(dish.name)}</h2><button type="button" class="btn btn-outline btn-small" data-action="dish-close">Cerrar</button></div>
     <div class="dish-detail-grid">${photoBlock(state.fullDishPhoto?.id === dish.id ? state.fullDishPhoto.photo : state.thumbnails[dish.id], dish.name)}
@@ -48,6 +63,7 @@ function dishDetail(dish, state) {
     ${dish.ingredientsText ? `<h3>Ingredientes</h3><p class="preformatted">${h(dish.ingredientsText)}</p>` : ''}
     ${dish.instructionsText ? `<h3>Preparación</h3><p class="preformatted">${h(dish.instructionsText)}</p>` : ''}
     ${(dish.tags || []).length ? `<div class="recipe-tags">${dish.tags.map(t => `<span>${h(t)}</span>`).join('')}</div>` : ''}
+    ${dishVoteControls(dish, state)}
     <div class="dish-actions">${canEdit(dish, state) ? `<button class="btn btn-outline btn-small" data-action="dish-edit" data-value="${h(dish.id)}">Editar</button>` : ''}
     ${state.profile.role === 'admin' ? `<button class="btn btn-outline btn-small" data-action="dish-healthy" data-value="${h(dish.id)}">${dish.approvedForHealthyMenu ? 'Quitar de saludables' : 'Aprobar saludable'}</button><button class="btn btn-outline btn-small" data-action="dish-archive" data-value="${h(dish.id)}">${dish.status === 'active' ? 'Archivar' : 'Reactivar'}</button>` : ''}</div></div></div></section>`;
 }
@@ -123,10 +139,10 @@ export function renderRecipes(state) {
           ${dish.description ? `<p class="recipe-list-description">${h(dish.description)}</p>` : ''}
           <div class="recipe-list-badges">${badge}${dish.prepMinutes ? `<span class="recipe-list-time">${icon('clock', 14)} ${Number(dish.prepMinutes)} min</span>` : ''}${labels}</div>
           <p class="recipe-list-author">${h(authorName(dish, state))}</p>
-        </div></button></article>`;
+        </div></button>${dishVoteControls(dish, state, true)}</article>`;
     }
     return `<article class="recipe-card">${opening}${photo}<div class="recipe-content"><div class="recipe-meta">${badge}</div>
-      <h3>${name}</h3><p>${h(authorName(dish, state))}</p>${labels}</div></button></article>`;
+      <h3>${name}</h3><p>${h(authorName(dish, state))}</p>${labels}</div></button>${dishVoteControls(dish, state, true)}</article>`;
   }).join('');
   const tags = availableRecipeTags(state.dishes);
   const selectedTags = [...new Set(selectedRecipeTags(state).map(normalizeText))];

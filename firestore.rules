@@ -189,6 +189,33 @@ service cloud.firestore {
             'prepMinutes','tags','hasPhoto','updatedAt']));
       allow delete: if false;
     }
+    // Preferencias independientes del recetario. Cada integrante puede cambiar
+    // exclusivamente su propio voto; los documentos de otros UID son inmutables.
+    function canVoteForDish(dishId) {
+      return isActive() &&
+        exists(/databases/$(database)/documents/dishes/$(dishId)) &&
+        get(/databases/$(database)/documents/dishes/$(dishId)).data.status == 'active';
+    }
+    function validVoteRecord() {
+      let d = request.resource.data;
+      return d.keys().hasOnly(['votes','updatedAt']) &&
+        d.keys().hasAll(['votes','updatedAt']) &&
+        d.votes is map && d.votes.size() <= 100 &&
+        d.updatedAt == request.time;
+    }
+    match /dishVotes/{dishId} {
+      allow read: if isActive();
+      allow create: if canVoteForDish(dishId) && validVoteRecord() &&
+        request.resource.data.votes.keys().hasOnly([request.auth.uid]) &&
+        request.resource.data.votes.keys().hasAll([request.auth.uid]) &&
+        request.resource.data.votes.get(request.auth.uid, null) in ['like','dislike'];
+      allow update: if canVoteForDish(dishId) && validVoteRecord() &&
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['votes','updatedAt']) &&
+        request.resource.data.votes.diff(resource.data.votes).affectedKeys().hasOnly([request.auth.uid]) &&
+        request.resource.data.votes.get(request.auth.uid, null) in ['like','dislike',null] &&
+        request.resource.data.votes.get(request.auth.uid, null) != resource.data.votes.get(request.auth.uid, null);
+      allow delete: if false;
+    }
     match /dishPhotos/{dishId} {
       allow read: if isActive();
       allow create, update: if canWriteDishImage(dishId) && validImage(dishId, false);

@@ -17,6 +17,8 @@ import { listenAuth, signIn, signUp, signOut, createPendingProfile, changePasswo
 import { watchProfile, watchFamily, watchAdminUsers, updateApproval, updateDisplayName } from './services/userService.js';
 import { watchConfig, watchCycle, watchWishes, watchDishes } from './services/menuService.js';
 import { saveDish, setDishHealthy, setDishArchived, getFullPhoto, getThumbnail } from './services/dishService.js';
+import { watchDishVotes, saveDishVote } from './services/dishVoteService.js';
+import { dishVoteSummary, nextDishVote } from './utils/dishVotes.js';
 import { duplicateDishNames } from './utils/dishValidation.js';
 import { parseDishImport, MAX_IMPORT_BYTES } from './utils/dishImport.js';
 import { previewDishImport, saveDishImport } from './services/dishImportService.js';
@@ -37,7 +39,7 @@ import { normalizeText } from './utils/html.js';
 const app = document.getElementById('app');
 const state = {
   phase: firebaseConfigured ? 'loading' : 'unavailable', user: null, profile: null, config: null,
-  familyUsers: [], adminUsers: [], dishes: [], wishes: [], cycle: null,
+  familyUsers: [], adminUsers: [], dishes: [], dishVotes: {}, dishVotesLoaded: false, voteBusyDishId: null, wishes: [], cycle: null,
   calendarView: 'week', weekIndex: 0, cycleOffset: 0,
   recipeQuery: '', recipeFilter: 'all', recipeView: 'cards', recipeTags: [], recipeMatchMode: 'all', recipeSort: 'az', recipePageSize: 24,
   recipeEditor: null, recipeDetailId: null, recipePhotoFile: null, recipeDraft: null, recipeNotice: '',
@@ -63,7 +65,7 @@ function disconnectFamily() {
   unsubscribeWishes?.(); unsubscribeWishes = null;
   unsubscribeDishes?.(); unsubscribeDishes = null;
   currentCycleId = '';
-  state.familyUsers = []; state.adminUsers = []; state.dishes = []; state.wishes = []; state.config = null; state.cycle = null;
+  state.familyUsers = []; state.adminUsers = []; state.dishes = []; state.dishVotes = {}; state.dishVotesLoaded = false; state.voteBusyDishId = null; state.wishes = []; state.config = null; state.cycle = null;
   state.thumbnails = {}; state.fullDishPhoto = null; state.recipeEditor = null; state.recipeDetailId = null; state.recipeDraft = null;
   state.wishDraft = null; state.wishSearch = ''; state.wishNotice = '';
   state.calendarEditor = null; state.calendarOrganizeSource = null; state.calendarOrganizeRevision = null; state.calendarNotice = ''; state.templateDraft = null;
@@ -138,6 +140,7 @@ function connectFamily() {
   addSubscription(watchConfig((config) => { state.config = config; connectSelectedCycle(); render(); }, safeError));
   addSubscription(watchFamily((users) => { state.familyUsers = users; render(); }, safeError));
   connectDishes();
+  addSubscription(watchDishVotes((votes) => { state.dishVotes = votes; state.dishVotesLoaded = true; render(); }, safeError));
   if (state.profile.role === 'admin') {
     addSubscription(watchAdminUsers((users) => { state.adminUsers = users; render(); }, safeError));
     void refreshAdminHistory();
@@ -249,6 +252,19 @@ document.addEventListener('click', async (event) => {
       await refreshAdminHistory();
     } catch (error) { state.notice = translateAuthError(error); }
     render(); return;
+  }
+  if (action === 'dish-vote' && ['like', 'dislike'].includes(button.dataset.vote)) {
+    const dish = state.dishes.find(item => item.id === value);
+    if (!dish || dish.status !== 'active' || state.voteBusyDishId) return;
+    const summary = dishVoteSummary(dish.id, state.dishVotes, state.familyUsers, state.user.uid);
+    const vote = nextDishVote(summary.userVote, button.dataset.vote);
+    state.voteBusyDishId = dish.id;
+    state.recipeNotice = '';
+    render();
+    try { await saveDishVote(dish.id, state.user.uid, vote); }
+    catch (error) { state.recipeNotice = translateAuthError(error); }
+    finally { state.voteBusyDishId = null; if (state.phase === 'active') render(); }
+    return;
   }
   if (action === 'dish-import-toggle' && state.profile.role === 'admin' && !state.dishImportBusy) {
     state.dishImportOpen = !state.dishImportOpen;
