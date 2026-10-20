@@ -1,5 +1,6 @@
 import { test } from 'node:test';
 import { strict as assert } from 'node:assert';
+import { readFileSync } from 'node:fs';
 import { validateDish, duplicateDishNames } from '../src/utils/dishValidation.js';
 import { asDataUri } from '../src/utils/dishPhoto.js';
 
@@ -154,4 +155,31 @@ test('paginación visual respeta Mostrar más y búsqueda global por etiqueta', 
   const filtered = renderRecipes({ ...baseState, recipeTag: 'postre', recipeFilter: 'healthy' });
   assert.match(filtered, /Receta 31/);
   assert.doesNotMatch(filtered, /data-action="dish-more"/);
+});
+
+
+test('la vista de lista muestra nombre, descripción, tiempo y etiquetas en una fila completa', () => {
+  const dish = {
+    id: 'crepas-1', name: 'Crepas de cajeta', status: 'active',
+    description: 'Postre casero preparado con leche y harina.', prepMinutes: 25,
+    createdBy: 'admin-uid', approvedForHealthyMenu: false, tags: ['postre'],
+  };
+  const html = renderRecipes({ ...uiState, recipeEditor: null, recipeView: 'list', dishes: [dish] });
+  assert.match(html, /class="recipe-card compact"/);
+  assert.match(html, /class="recipe-list-media"/);
+  assert.match(html, /<h3>Crepas de cajeta<\/h3>/);
+  assert.match(html, /class="recipe-list-description">Postre casero/);
+  assert.match(html, /25 min/);
+  assert.match(html, /postre/);
+  assert.match(html, /data-action="dish-detail"/);
+});
+
+test('la vista de lista mantiene el contenedor de foto aunque no haya imagen', () => {
+  const dish = { id: 'fideo-1', name: 'Sopa de fideo', status: 'active', createdBy: 'admin-uid', approvedForHealthyMenu: true, tags: [] };
+  const html = renderRecipes({ ...uiState, recipeEditor: null, recipeView: 'list', dishes: [dish] });
+  assert.match(html, /class="recipe-list-media"><div class="food-illustration"/);
+  assert.match(html, /Sopa de fideo/);
+  const css = readFileSync(new URL('../src/styles/components.css', import.meta.url), 'utf8');
+  assert.match(css, /\.recipe-card\.compact \.dish-card-open\{display:grid;grid-template-columns:/);
+  assert.match(css, /\.recipe-list-media>\.dish-photo\{[^}]*object-fit:contain/);
 });

@@ -68,9 +68,26 @@ export function renderRecipes(state) {
   const savedEditor = state.recipeEditor && state.recipeEditor !== 'new' ? state.dishes.find(d => d.id === state.recipeEditor) : null;
   const editor = state.recipeDraft ?? savedEditor;
   const detail = state.dishes.find(d => d.id === state.recipeDetailId);
-  const cards = dishes.map(dish => `<article class="recipe-card ${state.recipeView === 'list' ? 'compact' : ''}">
-    <button class="dish-card-open" type="button" data-action="dish-detail" data-value="${h(dish.id)}" aria-label="Ver ${h(dish.name)}">${photoBlock(state.thumbnails[dish.id], dish.name)}<div class="recipe-content"><div class="recipe-meta"><span class="pill ${dish.approvedForHealthyMenu ? 'healthy' : 'neutral'}">${dish.status === 'archived' ? 'Archivado' : dish.approvedForHealthyMenu ? icon('utensils', 13) + ' Saludable' : 'Sin marca saludable'}</span></div>
-    <h3>${h(dish.name)}</h3><p>${h(authorName(dish, state))}</p><div class="recipe-tags">${(dish.tags || []).map(t => `<span>${h(t)}</span>`).join('')}</div></div></button></article>`).join('');
+  const listView = state.recipeView === 'list';
+  const cards = dishes.map(dish => {
+    const name = h(dish.name);
+    const photo = photoBlock(state.thumbnails[dish.id], dish.name);
+    const badge = `<span class="pill ${dish.approvedForHealthyMenu ? 'healthy' : 'neutral'}">${dish.status === 'archived' ? 'Archivado' : dish.approvedForHealthyMenu ? icon('utensils', 13) + ' Saludable' : 'Sin marca saludable'}</span>`;
+    const labels = `<div class="recipe-tags">${(dish.tags || []).map(t => `<span>${h(t)}</span>`).join('')}</div>`;
+    const opening = `<button class="dish-card-open" type="button" data-action="dish-detail" data-value="${h(dish.id)}" aria-label="Ver ${name}">`;
+    if (listView) {
+      return `<article class="recipe-card compact">${opening}
+        <div class="recipe-list-media">${photo}</div>
+        <div class="recipe-content">
+          <h3>${name}</h3>
+          ${dish.description ? `<p class="recipe-list-description">${h(dish.description)}</p>` : ''}
+          <div class="recipe-list-badges">${badge}${dish.prepMinutes ? `<span class="recipe-list-time">${icon('clock', 14)} ${Number(dish.prepMinutes)} min</span>` : ''}${labels}</div>
+          <p class="recipe-list-author">${h(authorName(dish, state))}</p>
+        </div></button></article>`;
+    }
+    return `<article class="recipe-card">${opening}${photo}<div class="recipe-content"><div class="recipe-meta">${badge}</div>
+      <h3>${name}</h3><p>${h(authorName(dish, state))}</p>${labels}</div></button></article>`;
+  }).join('');
   const tags = [...new Set(state.dishes.filter(d => d.status === 'active').flatMap(d => d.tags || []))]
     .filter(t => !['postre','bebida'].includes(normalizeText(t))).slice(0, 25);
   return `${pageHeader('RECETARIO COMPARTIDO', 'Nuestros platillos', 'Las recetas que compartimos en familia.')}
