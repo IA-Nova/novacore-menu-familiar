@@ -17,7 +17,8 @@ function statusFor(wish, date) {
 function picker(state) {
   const draft = state.wishDraft;
   const q = normalizeText(state.wishSearch || '');
-  const available = state.dishes.filter(d => d.status === 'active' && normalizeText(d.name).includes(q));
+  const matches = state.dishes.filter(d => d.status === 'active' && normalizeText(d.name).includes(q));
+  const available = matches.slice(0, state.recipePageSize);
   const selected = draft.selection.map(id => {
     const dish = state.dishes.find(d => d.id === id);
     return { id, name: dish?.name || draft.newNames[id] || 'Platillo no disponible' };
@@ -29,7 +30,7 @@ function picker(state) {
     ${selected.length ? `<div class="wish-picked-list">${selected.map(d => `<button type="button" data-action="wish-remove-dish" data-value="${h(d.id)}" class="wish-picked-tag">${h(d.name)} <span aria-label="Quitar">×</span></button>`).join('')}</div>` : '<p class="muted-label">Todavía no has elegido platillos.</p>'}</div>
     <label class="dish-field"><span>Buscar platillos</span><input id="wish-search" type="search" autocomplete="off" placeholder="Buscar en el recetario..." value="${h(state.wishSearch || '')}"></label>
     <div class="wish-options">${available.length ? available.map(d => `<button type="button" data-action="wish-toggle-dish" data-value="${h(d.id)}" class="wish-option ${draft.selection.includes(d.id) ? 'is-selected' : ''}" aria-pressed="${draft.selection.includes(d.id)}"><span>${h(d.name)}</span><span>${draft.selection.includes(d.id) ? 'Seleccionado ✓' : 'Agregar +'}</span></button>`).join('') : '<p class="muted-label">No hay platillos que coincidan.</p>'}</div>
-    ${state.dishes.length >= state.recipePageSize ? '<button type="button" class="btn btn-outline btn-small" data-action="dish-more">Mostrar más platillos</button>' : ''}
+    ${matches.length > available.length ? '<button type="button" class="btn btn-outline btn-small" data-action="dish-more">Mostrar más platillos</button>' : ''}
     <form data-form="wish-quick-dish" class="wish-quick-add"><label for="wish-new-name">¿Falta algún platillo?</label><div class="wish-quick-row"><input required maxlength="100" name="name" id="wish-new-name" placeholder="Nombre del nuevo platillo"><button type="submit" class="btn btn-outline">Agregar al recetario</button></div><p class="muted-label">Se añadirá también a tu selección.</p></form>
     <form data-form="wish" class="wish-save-form"><div class="dish-field"><label for="wish-note">Nota (opcional)</label><textarea id="wish-note" name="note" rows="3" maxlength="${MAX_WISH_NOTE}" placeholder="Ej. Sin cebolla">${h(draft.note)}</textarea></div><div class="wish-editor-buttons"><button type="submit" class="btn btn-primary" ${!draft.selection.length ? 'disabled' : ''}>Guardar mi antojo</button><button type="button" class="btn btn-outline" data-action="wish-decline">No quiero antojo este ciclo</button></div></form>
   </section>`;

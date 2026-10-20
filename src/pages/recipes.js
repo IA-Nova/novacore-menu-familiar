@@ -50,13 +50,21 @@ function dishDetail(dish, state) {
     <div class="dish-actions">${canEdit(dish, state) ? `<button class="btn btn-outline btn-small" data-action="dish-edit" data-value="${h(dish.id)}">Editar</button>` : ''}
     ${state.profile.role === 'admin' ? `<button class="btn btn-outline btn-small" data-action="dish-healthy" data-value="${h(dish.id)}">${dish.approvedForHealthyMenu ? 'Quitar de saludables' : 'Aprobar saludable'}</button><button class="btn btn-outline btn-small" data-action="dish-archive" data-value="${h(dish.id)}">${dish.status === 'active' ? 'Archivar' : 'Reactivar'}</button>` : ''}</div></div></div></section>`;
 }
-export function renderRecipes(state) {
-  const search = normalizeText(state.recipeQuery);
-  const dishes = (state.dishes || []).filter(d => (d.status === 'active' || (state.recipeFilter === 'archived' && state.profile.role === 'admin')) && normalizeText(d.name).includes(search))
+// Buscar y filtrar sobre el catálogo completo, antes de limitar las tarjetas visibles.
+export function matchingRecipeDishes(state) {
+  const search = normalizeText(state.recipeQuery || '');
+  return (state.dishes || []).filter(d => (d.status === 'active' || (state.recipeFilter === 'archived' && state.profile.role === 'admin')) && normalizeText(d.name).includes(search))
     .filter(d => state.recipeFilter !== 'healthy' || d.approvedForHealthyMenu && d.status === 'active')
     .filter(d => state.recipeFilter !== 'mine' || d.createdBy === state.user?.uid && d.status === 'active')
     .filter(d => state.recipeFilter !== 'archived' || d.status === 'archived')
     .filter(d => !state.recipeTag || (d.tags || []).some(t => normalizeText(t) === normalizeText(state.recipeTag)));
+}
+export function visibleRecipeDishes(state) {
+  return matchingRecipeDishes(state).slice(0, state.recipePageSize);
+}
+export function renderRecipes(state) {
+  const matches = matchingRecipeDishes(state);
+  const dishes = matches.slice(0, state.recipePageSize);
   const savedEditor = state.recipeEditor && state.recipeEditor !== 'new' ? state.dishes.find(d => d.id === state.recipeEditor) : null;
   const editor = state.recipeDraft ?? savedEditor;
   const detail = state.dishes.find(d => d.id === state.recipeDetailId);
@@ -76,8 +84,8 @@ export function renderRecipes(state) {
     <div class="recipe-controls"><div class="segmented" aria-label="Filtrar platillos">${[['all','Todos'],['healthy','Saludables'],['mine','Míos'],...(state.profile.role === 'admin' ? [['archived','Archivados']] : [])].map(([k,v]) => `<button data-action="recipe-filter" data-value="${k}" class="${state.recipeFilter === k ? 'selected' : ''}" aria-pressed="${state.recipeFilter === k}">${v}</button>`).join('')}</div>
     <div class="segmented compact-tabs" aria-label="Presentación"><button type="button" aria-label="Tarjetas" title="Tarjetas" data-action="recipe-view" data-value="cards" class="${state.recipeView === 'cards' ? 'selected' : ''}">${icon('grid', 18)}</button><button type="button" aria-label="Lista" title="Lista" data-action="recipe-view" data-value="list" class="${state.recipeView === 'list' ? 'selected' : ''}">${icon('list', 18)}</button></div></div></div>
     <div class="dish-tag-filter"><button type="button" class="${!state.recipeTag ? 'active' : ''}" data-action="recipe-tag" data-value="">Todas las etiquetas</button>${[['postre','Postres'],['bebida','Bebidas']].map(([k,v]) => `<button type="button" data-action="recipe-tag" data-value="${k}" class="${normalizeText(state.recipeTag) === k ? 'active' : ''}">${v}</button>`).join('')}${tags.map(t => `<button type="button" data-action="recipe-tag" data-value="${h(t)}" class="${state.recipeTag === t ? 'active' : ''}">${h(t)}</button>`).join('')}</div>
-    <div class="recipes-intro"><strong>${dishes.length} platillos</strong></div>
+    <div class="recipes-intro"><strong>${matches.length} platillos</strong></div>
     ${dishes.length ? `<div class="recipe-grid ${state.recipeView}">${cards}</div>` : '<div class="empty-result">No hay platillos que coincidan.</div>'}
-    ${state.dishes.length >= state.recipePageSize ? '<div class="dish-more-container"><button class="btn btn-outline" data-action="dish-more">Mostrar más platillos</button></div>' : ''}
+    ${matches.length > dishes.length ? '<div class="dish-more-container"><button class="btn btn-outline" data-action="dish-more">Mostrar más platillos</button></div>' : ''}
   </section>`;
 }

@@ -125,3 +125,33 @@ test('importar desde Recetario aparece solo al administrador', () => {
   assert.match(adminHtml, /data-form="admin-dish-import-preview"/);
   assert.doesNotMatch(memberHtml, /dish-import-toggle|admin-dish-import-preview/);
 });
+
+test('la búsqueda encuentra platillos posteriores a la primera página sin pulsar Mostrar más', () => {
+  const items = Array.from({ length: 40 }, (_, i) => ({
+    id: `d${i}`, name: `Platillo ${i + 1}`, status: 'active', tags: [], createdBy: 'admin-uid',
+    approvedForHealthyMenu: false, hasPhoto: false,
+  }));
+  items.push({ id: 'crepas', name: 'Crepas con cajeta', status: 'active', tags: [],
+    createdBy: 'admin-uid', approvedForHealthyMenu: false, hasPhoto: true });
+  const queryState = { ...uiState, recipeEditor: null, dishes: items, recipeQuery: 'CREPAS', recipePageSize: 24 };
+  const html = renderRecipes(queryState);
+  assert.match(html, /Crepas con cajeta/);
+  assert.match(html, /<strong>1 platillos<\/strong>/);
+  assert.doesNotMatch(html, /data-action="dish-more"/);
+});
+
+test('paginación visual respeta Mostrar más y búsqueda global por etiqueta', () => {
+  const items = Array.from({ length: 31 }, (_, i) => ({
+    id: `d${i}`, name: `Receta ${i + 1}`, status: 'active', tags: i === 30 ? ['postre'] : [],
+    createdBy: 'admin-uid', approvedForHealthyMenu: i === 30, hasPhoto: false,
+  }));
+  const baseState = { ...uiState, recipeEditor: null, dishes: items, recipePageSize: 24 };
+  const first = renderRecipes(baseState);
+  assert.equal((first.match(/data-action="dish-detail"/g) || []).length, 24);
+  assert.match(first, /data-action="dish-more"/);
+  assert.match(first, /<strong>31 platillos<\/strong>/);
+  assert.equal((renderRecipes({ ...baseState, recipePageSize: 48 }).match(/data-action="dish-detail"/g) || []).length, 31);
+  const filtered = renderRecipes({ ...baseState, recipeTag: 'postre', recipeFilter: 'healthy' });
+  assert.match(filtered, /Receta 31/);
+  assert.doesNotMatch(filtered, /data-action="dish-more"/);
+});

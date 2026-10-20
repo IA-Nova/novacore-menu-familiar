@@ -8,6 +8,8 @@ export const watchCycle = (cycleId, callback, error) => onSnapshot(doc(db, 'cycl
 export const watchWishes = (cycleId, callback, error) => onSnapshot(
   query(collection(db, 'cycles', cycleId, 'wishes'), limit(10)),
   (snap) => callback(snap.docs.map((d) => ({ userId: d.id, ...d.data() }))), error);
-export const watchDishes = (callback, error, pageSize = 24) => onSnapshot(
-  query(collection(db, 'dishes'), orderBy('createdAt', 'desc'), limit(pageSize)),
+// Cargar todos los metadatos permite buscar por cualquier parte del nombre.
+// Las tarjetas siguen paginadas en la interfaz y las fotos se descargan bajo demanda.
+export const watchDishes = (callback, error) => onSnapshot(
+  query(collection(db, 'dishes'), orderBy('createdAt', 'desc')),
   (snap) => callback(snap.docs.map((d) => ({ id: d.id, ...d.data() }))), error);

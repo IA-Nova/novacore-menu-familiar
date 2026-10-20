@@ -8,7 +8,7 @@ import { pageLayout } from './components/layout.js';
 import { routeFromHash, needsCalendarRedirect } from './utils/navigationRoutes.js';
 import { renderCalendar } from './pages/calendar.js';
 import { renderWishes } from './pages/wishes.js';
-import { renderRecipes } from './pages/recipes.js';
+import { renderRecipes, visibleRecipeDishes } from './pages/recipes.js';
 import { renderAdmin } from './pages/admin.js';
 import { renderProfile } from './pages/profile.js';
 import { renderLogin, renderRegister, renderGate } from './pages/access.js';
@@ -107,8 +107,9 @@ async function loadThumbnailIds(ids) {
   }));
   if (state.phase === 'active') render();
 }
-async function loadThumbnails(dishes) {
-  await loadThumbnailIds(dishes.filter(d => d.hasPhoto).map(d => d.id));
+async function loadRecipeThumbnails() {
+  if (state.phase !== 'active' || routeName() !== 'recetario') return;
+  await loadThumbnailIds(visibleRecipeDishes(state).filter(d => d.hasPhoto).map(d => d.id));
 }
 async function loadCalendarThumbnails() {
   if (state.phase !== 'active' || routeName() !== 'calendario' || !state.cycle) return;
@@ -122,8 +123,7 @@ function connectDishes() {
   unsubscribeDishes?.();
   unsubscribeDishes = watchDishes((dishes) => {
     state.dishes = dishes; render();
-    void loadThumbnails(dishes);
-  }, safeError, state.recipePageSize);
+  }, safeError);
 }
 async function refreshAdminHistory() {
   if (state.phase !== 'active' || state.profile?.role !== 'admin' || state.historyLoading) return;
@@ -159,6 +159,7 @@ function render({ scroll = false, focusSearch = false } = {}) {
   const requested = routeName();
   const route = renderers[requested] && (requested !== 'administracion' || state.profile.role === 'admin') ? requested : 'calendario';
   app.innerHTML = pageLayout(route, renderers[route](), { ...state.profile, familyName: state.config?.familyName });
+  if (route === 'recetario') void loadRecipeThumbnails();
   document.title = `${titles[route]} | NovaCore Menú Familiar`;
   if (focusSearch && route === 'recetario') {
     const input = document.getElementById('recipe-search');
@@ -428,7 +429,7 @@ document.addEventListener('click', async (event) => {
     } catch (error) { state.wishNotice = translateAuthError(error); }
     render(); return;
   }
-  if (action === 'recipe-filter') { state.recipeFilter = value; state.recipeTag = ''; }
+  if (action === 'recipe-filter') { state.recipeFilter = value; state.recipeTag = ''; state.recipePageSize = 24; }
   if (action === 'recipe-view') state.recipeView = value;
   if (action === 'dish-new') {
     state.recipeEditor = 'new'; state.recipeDetailId = null; state.recipePhotoFile = null; state.recipeDraft = null; state.recipeNotice = '';
@@ -471,8 +472,8 @@ document.addEventListener('click', async (event) => {
     } catch (error) { state.recipeNotice = translateAuthError(error); }
     render(); return;
   }
-  if (action === 'recipe-tag') { state.recipeTag = value; render(); return; }
-  if (action === 'dish-more') { state.recipePageSize += 24; connectDishes(); return; }
+  if (action === 'recipe-tag') { state.recipeTag = value; state.recipePageSize = 24; render(); return; }
+  if (action === 'dish-more') { state.recipePageSize += 24; render(); return; }
   if (action === 'approve-user' || action === 'disable-user') {
     const user = state.adminUsers.find((u) => u.uid === value);
     if (!user || state.profile.role !== 'admin' || user.uid === state.user?.uid) return;
@@ -565,11 +566,11 @@ document.addEventListener('input', (event) => {
   }
   if (event.target.id === 'wish-note' && state.wishDraft) state.wishDraft.note = event.target.value;
   if (event.target.id === 'wish-search') {
-    state.wishSearch = event.target.value; render();
+    state.wishSearch = event.target.value; state.recipePageSize = 24; render();
     const input = document.getElementById('wish-search');
     input?.focus(); input?.setSelectionRange(input.value.length, input.value.length);
   }
-  if (event.target.id === 'recipe-search') { state.recipeQuery = event.target.value; render({ focusSearch: true }); }
+  if (event.target.id === 'recipe-search') { state.recipeQuery = event.target.value; state.recipePageSize = 24; render({ focusSearch: true }); }
 });
 document.addEventListener('change', async (event) => {
   if (event.target.id === 'admin-backup-file' && state.profile?.role === 'admin') {
