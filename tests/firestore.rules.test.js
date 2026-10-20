@@ -14,6 +14,7 @@ before(async () => {
       ['admin-uid', 'admin', 'Administrador', 'admin', 'active'],
       ['active-uid', 'ana', 'Ana', 'member', 'active'],
       ['pending-uid', 'luis', 'Luis', 'member', 'pending'],
+      ['approval-uid', 'sofia', 'Sofia', 'member', 'pending'],
       ['disabled-uid', 'pepe', 'Pepe', 'member', 'disabled'],
     ];
     for (const [uid, username, displayName, role, status] of seed) {
@@ -59,14 +60,23 @@ test('usuario nuevo sólo puede crear su propio perfil pending', async () => {
   await assertFails(setDoc(doc(db, 'users', 'other-uid'), data));
   await assertFails(setDoc(doc(db, 'users', 'new-uid'), { ...data, role: 'admin' }));
 });
+
 test('admin aprueba pero miembro no puede aprobar a otros', async () => {
   const admin = authUser('admin-uid', 'admin@users.novacore');
   const member = authUser('active-uid', 'ana@users.novacore');
-  await assertFails(updateDoc(doc(member, 'users', 'pending-uid'), { status: 'active' }));
-  await assertSucceeds(updateDoc(doc(admin, 'users', 'pending-uid'), {
-    status: 'active', approvedAt: serverTimestamp(), approvedBy: 'admin-uid', updatedAt: serverTimestamp(),
+
+  await assertFails(updateDoc(doc(member, 'users', 'approval-uid'), {
+    status: 'active'
+  }));
+
+  await assertSucceeds(updateDoc(doc(admin, 'users', 'approval-uid'), {
+    status: 'active',
+    approvedAt: serverTimestamp(),
+    approvedBy: 'admin-uid',
+    updatedAt: serverTimestamp(),
   }));
 });
+
 test('activos solo consultan integrantes activos; pendientes ven su perfil', async () => {
   const db = authUser('active-uid', 'ana@users.novacore');
   await assertSucceeds(getDocs(query(collection(db, 'users'), where('status', '==', 'active'))));

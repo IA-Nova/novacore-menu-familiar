@@ -25,7 +25,7 @@ test('no se suben configuraciones privadas, pero sí los datos públicos web', (
 test('el código contiene el botón Hoy, sin mensajes de implementación a la familia', () => {
   const calendar = read('src/pages/calendar.js');
   assert.match(calendar, /data-action="calendar-today"/);
-  const pages = ['src/pages/home.js', 'src/pages/calendar.js', 'src/pages/wishes.js',
+  const pages = ['src/pages/calendar.js', 'src/pages/wishes.js',
     'src/pages/recipes.js', 'src/pages/admin.js', 'src/pages/adminData.js'];
   for (const path of pages) assert.doesNotMatch(read(path), /cuando se conecte Firestore|fase pendiente|módulo en desarrollo/i);
 });
@@ -33,5 +33,5 @@ test('la configuración de Firestore apunta a las reglas del proyecto', () => {
   const conf = JSON.parse(read('firebase.json'));
   assert.equal(conf.firestore.rules,'firestore.rules');
   assert.equal(conf.emulators.firestore.port, 8080);
-  assert.ok(existsSync(join(new URL('.', root).pathname, '.github/workflows/pages.yml')));
+  assert.ok(existsSync(new URL('.github/workflows/pages.yml', root)));
 });

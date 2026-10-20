@@ -4,7 +4,7 @@ import './styles/layout.css';
 import './styles/components.css';
 import './styles/auth.css';
 import { pageLayout } from './components/layout.js';
-import { renderHome } from './pages/home.js';
+import { routeFromHash, needsCalendarRedirect } from './utils/navigationRoutes.js';
 import { renderCalendar } from './pages/calendar.js';
 import { renderWishes } from './pages/wishes.js';
 import { renderRecipes } from './pages/recipes.js';
@@ -65,7 +65,12 @@ function disconnectFamily() {
   state.backupPreview = null; state.backupBusy = false; state.backupProgress = ''; state.backupError = ''; state.backupFileName = '';
   state.recentCycles = []; state.historyLoading = false; state.historyError = '';
 }
-function routeName() { return (location.hash.slice(2).split('?')[0] || 'inicio'); }
+function routeName() { return routeFromHash(location.hash); }
+function ensureCalendarUrl() {
+  if (needsCalendarRedirect(location.hash)) {
+    window.history.replaceState(null, '', `${location.pathname}${location.search}#/calendario`);
+  }
+}
 function selectedCycleId() {
   const now = currentMexicoDate();
   const base = cycleStartForDate(now, state.config?.anchorMonday);
@@ -133,9 +138,9 @@ function connectFamily() {
   }
   connectSelectedCycle();
 }
-const titles = { inicio: 'Inicio', calendario: 'Calendario', antojos: 'Antojos', recetario: 'Recetario', administracion: 'Administración', perfil: 'Mi perfil' };
+const titles = { calendario: 'Calendario', antojos: 'Antojos', recetario: 'Recetario', administracion: 'Administración', perfil: 'Mi perfil' };
 const renderers = {
-  inicio: () => renderHome(state), calendario: () => renderCalendar(state),
+  calendario: () => renderCalendar(state),
   antojos: () => renderWishes(state), recetario: () => renderRecipes(state),
   administracion: () => renderAdmin(state), perfil: () => renderProfile(state),
 };
@@ -147,7 +152,7 @@ function render({ scroll = false, focusSearch = false } = {}) {
     return;
   }
   const requested = routeName();
-  const route = renderers[requested] && (requested !== 'administracion' || state.profile.role === 'admin') ? requested : 'inicio';
+  const route = renderers[requested] && (requested !== 'administracion' || state.profile.role === 'admin') ? requested : 'calendario';
   app.innerHTML = pageLayout(route, renderers[route](), { ...state.profile, familyName: state.config?.familyName });
   document.title = `${titles[route]} | NovaCore Menú Familiar`;
   if (focusSearch && route === 'recetario') {
@@ -171,6 +176,9 @@ function onProfile(profile) {
   const prevRole = state.profile?.role;
   state.profile = profile;
   if (profile.status === 'active') {
+    if (routeName() === 'registro' || routeName() === 'login') {
+      window.history.replaceState(null, '', `${location.pathname}${location.search}#/calendario`);
+    }
     state.phase = 'active';
     if (!wasActive || prevRole !== profile.role) connectFamily();
   } else {
@@ -560,6 +568,11 @@ document.addEventListener('change', async (event) => {
     if (status) status.textContent = state.recipePhotoFile ? state.recipePhotoFile.name : 'Sin fotografía seleccionada.';
   }
 });
-window.addEventListener('hashchange', () => { if (state.phase === 'active') connectSelectedCycle(); render({ scroll: true }); void loadCalendarThumbnails(); });
-if (!location.hash || location.hash === '#') location.replace(`${location.pathname}${location.search}#/inicio`);
+window.addEventListener('hashchange', () => {
+  ensureCalendarUrl();
+  if (state.phase === 'active') connectSelectedCycle();
+  render({ scroll: true });
+  void loadCalendarThumbnails();
+});
+ensureCalendarUrl();
 render();

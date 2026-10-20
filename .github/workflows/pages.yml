@@ -1,0 +1,55 @@
+name: Verificar y publicar NovaCore
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: novacore-pages
+  cancel-in-progress: true
+
+jobs:
+  publicar:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+    steps:
+      - name: Descargar código
+        uses: actions/checkout@v4
+      - name: Instalar Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Instalar Java para el emulador de Firestore
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+      - name: Instalar dependencias
+        run: npm install --no-audit --no-fund
+      - name: Probar lógica de la aplicación
+        run: npm run test:unit
+      - name: Probar permisos en Firestore Emulator
+        run: npx firebase emulators:exec --only firestore --project demo-novacore-menu-familiar "npm run test:rules"
+      - name: Comprobar configuración pública y reglas
+        run: npm run check:production
+      - name: Compilar para la ruta de GitHub Pages
+        env:
+          VITE_BASE_PATH: ${{ github.event.repository.name == format('{0}.github.io', github.repository_owner) && '/' || format('/{0}/', github.event.repository.name) }}
+        run: npm run build
+      - name: Preparar Pages
+        uses: actions/configure-pages@v5
+      - name: Subir página compilada
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: ./dist
+      - name: Publicar
+        id: deploy
+        uses: actions/deploy-pages@v4

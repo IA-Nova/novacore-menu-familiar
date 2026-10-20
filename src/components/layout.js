@@ -2,7 +2,6 @@ import { icon } from './icons.js';
 import { escapeHtml } from '../utils/html.js';
 
 const items = [
-  { route: 'inicio', label: 'Inicio', icon: 'home' },
   { route: 'calendario', label: 'Calendario', icon: 'calendar' },
   { route: 'antojos', label: 'Antojos', icon: 'heart' },
   { route: 'recetario', label: 'Recetario', icon: 'book' },
@@ -13,7 +12,7 @@ export function pageLayout(route, content, profile = {}) {
       ${icon(item.icon)}<span>${item.label}</span></a>`;
   return `<div class="app-layout">
     <aside class="sidebar">
-      <a href="#/inicio" class="brand" aria-label="NovaCore Menú Familiar, inicio">
+      <a href="#/calendario" class="brand" aria-label="NovaCore Menú Familiar, abrir calendario">
         <span class="brand-logo">${icon('utensils', 24)}</span>
         <span><strong>NovaCore</strong><small>Menú Familiar</small></span>
       </a>
@@ -29,7 +28,7 @@ export function pageLayout(route, content, profile = {}) {
     </aside>
     <div class="main-area">
       <header class="topbar">
-        <a href="#/inicio" class="mobile-brand"><span class="brand-logo">${icon('utensils', 21)}</span><span><strong>NovaCore</strong><small>Menú Familiar</small></span></a>
+        <a href="#/calendario" class="mobile-brand"><span class="brand-logo">${icon('utensils', 21)}</span><span><strong>NovaCore</strong><small>Menú Familiar</small></span></a>
         <div class="topbar-right"><span class="topbar-family">${escapeHtml(profile.familyName || "Mi familia")}</span>
           ${profile.role === "admin" ? `<a class="topbar-admin" href="#/administracion">Administración</a>` : ""}
           <a class="avatar-link" href="#/perfil" aria-label="Ir a mi perfil">${escapeHtml((profile.displayName || "U").trim().charAt(0).toUpperCase())}</a></div>

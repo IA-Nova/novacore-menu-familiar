@@ -1,6 +1,6 @@
 {
   "name": "novacore-menu-familiar",
-  "version": "0.8.0",
+  "version": "1.2.0",
   "private": true,
   "type": "module",
   "scripts": {
@@ -10,10 +10,10 @@
     "test": "node --test tests/*.test.js",
     "emulators": "firebase emulators:start --only auth,firestore",
     "test:rules": "node --test tests/firestore.rules.test.js",
-    "test:unit": "node --test tests/account.test.js tests/calendarNavigation.test.js tests/dates.test.js tests/dishValidation.test.js tests/wishValidation.test.js tests/wishPage.test.js tests/cyclePlanning.test.js tests/calendarPage.test.js tests/backupValidation.test.js tests/declineFinalization.test.js tests/deployment.test.js",
+    "test:unit": "node --test tests/account.test.js tests/calendarNavigation.test.js tests/dates.test.js tests/dishValidation.test.js tests/wishValidation.test.js tests/wishPage.test.js tests/cyclePlanning.test.js tests/calendarPage.test.js tests/backupValidation.test.js tests/declineFinalization.test.js tests/deployment.test.js tests/navigationRoutes.test.js",
     "test:all": "npm run test:unit && npm run test:rules",
     "check:production": "node scripts/check-production.mjs",
-    "test:pages": "node --test tests/deployment.test.js"
+    "test:pages": "node --test tests/deployment.test.js tests/navigationRoutes.test.js"
   },
   "dependencies": {
     "firebase": "^12.0.0"
