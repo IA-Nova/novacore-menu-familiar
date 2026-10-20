@@ -1,0 +1,14 @@
+/* Administración: incorporación por lotes de recetas. */
+.dish-import-form{display:grid;gap:13px;max-width:740px;margin-top:17px}
+.dish-import-form .dish-field span{font-weight:700;font-size:.83rem}
+.dish-import-form .btn{justify-self:start}
+.dish-import-preview{margin-top:20px;border:1px solid #d9cbe8;border-radius:14px;padding:16px;background:#f8f5fb}
+.dish-import-preview h3{font-size:1rem;margin-bottom:8px}
+.dish-import-preview>p{font-size:.86rem;margin:6px 0 12px}
+.dish-import-list{list-style-position:inside;display:grid;gap:8px;margin:0;padding:0}
+.dish-import-row{display:flex;justify-content:space-between;align-items:center;gap:12px;border-radius:10px;border:1px solid #ece5f1;background:#fff;padding:10px 12px}
+.dish-import-row>div{display:grid;gap:4px;min-width:0}
+.dish-import-row strong{font-size:.88rem;overflow-wrap:anywhere}
+.dish-import-row small{color:#6b5c73;overflow-wrap:anywhere}
+.dish-import-row .pill{flex-shrink:0;font-size:.72rem}
+@media(max-width:600px){.dish-import-form .btn{width:100%}.dish-import-row{align-items:flex-start;flex-direction:column}.dish-import-row .pill{align-self:flex-start}}

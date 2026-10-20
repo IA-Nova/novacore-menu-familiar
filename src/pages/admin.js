@@ -1,4 +1,5 @@
 import { renderAdminHistory, renderAdminBackups } from './adminData.js';
+import { renderAdminDishImport } from './adminImport.js';
 import { pageHeader } from '../components/layout.js';
 import { escapeHtml } from '../utils/html.js';
 
@@ -31,5 +32,6 @@ export function renderAdmin(state) {
           return `<div class="admin-user-row"><div class="admin-user-meta"><strong>${escapeHtml(u?.displayName || 'Integrante')}</strong></div><button type="button" class="btn btn-outline btn-small" data-action="admin-finalize-decline" data-value="${escapeHtml(w.userId)}">Cerrar renuncia</button></div>`;
         }).join('')}</section>` : ''}
     ${renderAdminHistory(state)}
+    ${renderAdminDishImport(state)}
     ${renderAdminBackups(state)}`;
 }

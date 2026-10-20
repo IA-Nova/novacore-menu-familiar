@@ -67,3 +67,61 @@ test('integrantes pueden clasificar Postre/Bebida pero no otorgar etiqueta salud
   assert.match(text, /name="tagPostre"/);
   assert.match(text, /name="tagBebida"/);
 });
+
+import { parseDishImport, markImportDuplicates, MAX_IMPORT_DISHES } from '../src/utils/dishImport.js';
+import { renderAdminDishImport } from '../src/pages/adminImport.js';
+
+test('importar JSON convierte recetas a documentos con campos del recetario', () => {
+  const dishes = parseDishImport(JSON.stringify([
+    { name: ' Arroz rojo ', approvedForHealthyMenu: true, prepMinutes: 40, tags: [] },
+    { name: 'Atole de vainilla', tags: ['BEBIDA'], ingredientsText: 'Leche', instructionsText: 'Hervir.' },
+  ]));
+  assert.equal(dishes.length, 2);
+  assert.equal(dishes[0].searchName, 'arroz rojo');
+  assert.equal(dishes[0].approvedForHealthyMenu, true);
+  assert.equal(dishes[0].prepMinutes, 40);
+  assert.deepEqual(dishes[1].tags, ['bebida']);
+  assert.equal(dishes[1].approvedForHealthyMenu, false);
+  for (const dish of dishes) {
+    assert.ok(!('createdBy' in dish));
+    assert.ok(!('createdAt' in dish));
+  }
+});
+test('importar omite coincidencias entre archivo y recetario, incluso acentos', () => {
+  const dishes = parseDishImport(JSON.stringify([
+    { name: 'Arroz rojo' }, { name: 'ARROZ ROJO' }, { name: 'Albóndigas' }, { name: 'Mortadela' },
+  ]));
+  assert.deepEqual(markImportDuplicates(dishes, new Set(['albondigas', 'mortadela'])).map(d => d.status),
+    ['nueva', 'repetida', 'existente', 'existente']);
+});
+test('JSON inválido y campos no admitidos se rechazan antes de importar', () => {
+  assert.throws(() => parseDishImport('{'), /JSON válido/);
+  assert.throws(() => parseDishImport('{}'), /lista/);
+  assert.throws(() => parseDishImport(JSON.stringify(Array(MAX_IMPORT_DISHES + 1).fill({ name: 'Arroz' }))), /lista/);
+  assert.throws(() => parseDishImport(JSON.stringify([{ name: 'Arroz', createdBy: 'otro' }])), /no reconocidos/);
+  assert.throws(() => parseDishImport(JSON.stringify([{ name: 'Arroz', approvedForHealthyMenu: 'true' }])), /verdadero o falso/);
+  assert.throws(() => parseDishImport(JSON.stringify([{ name: 'Arroz', prepMinutes: 9999 }])), /tiempo/);
+  assert.throws(() => parseDishImport(JSON.stringify([{ name: 'Arroz', tags: ['postre', {}] }])), /etiquetas/);
+  assert.throws(() => parseDishImport(JSON.stringify([{ name: 'x'.repeat(101) }])), /nombre/);
+});
+test('importador administrativo muestra vista previa segura y sin instrucciones técnicas', () => {
+  const dish = parseDishImport(JSON.stringify([{ name: '<img onerror=alert(1)>', tags: ['postre'] }]))[0];
+  const html = renderAdminDishImport({
+    dishImportPreview: [{dish, status:'nueva'}], dishImportBusy:false,
+    dishImportError:'', dishImportMessage:'',
+  });
+  assert.match(html, /Importar recetas/);
+  assert.match(html, /admin-dish-import-save/);
+  assert.match(html, /&lt;img onerror=alert\(1\)&gt;/);
+  assert.doesNotMatch(html, /<img onerror=/);
+  assert.doesNotMatch(html, /cuando se conecte|fase pendiente|todav[ií]a no se ha desarrollado/i);
+});
+
+test('importar desde Recetario aparece solo al administrador', () => {
+  const adminHtml = renderRecipes({ ...uiState, recipeEditor: null, dishImportOpen: true,
+    dishImportPreview: null, dishImportBusy: false, dishImportError: '', dishImportMessage: '' });
+  const memberHtml = renderRecipes({ ...uiState, profile: { role: 'member' }, recipeEditor: null, dishImportOpen: true });
+  assert.match(adminHtml, /data-action="dish-import-toggle"/);
+  assert.match(adminHtml, /data-form="admin-dish-import-preview"/);
+  assert.doesNotMatch(memberHtml, /dish-import-toggle|admin-dish-import-preview/);
+});

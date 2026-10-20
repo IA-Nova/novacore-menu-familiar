@@ -3,6 +3,7 @@ import './styles/base.css';
 import './styles/layout.css';
 import './styles/components.css';
 import './styles/auth.css';
+import './styles/adminImport.css';
 import { pageLayout } from './components/layout.js';
 import { routeFromHash, needsCalendarRedirect } from './utils/navigationRoutes.js';
 import { renderCalendar } from './pages/calendar.js';
@@ -17,6 +18,8 @@ import { watchProfile, watchFamily, watchAdminUsers, updateApproval, updateDispl
 import { watchConfig, watchCycle, watchWishes, watchDishes } from './services/menuService.js';
 import { saveDish, setDishHealthy, setDishArchived, getFullPhoto, getThumbnail } from './services/dishService.js';
 import { duplicateDishNames } from './utils/dishValidation.js';
+import { parseDishImport, MAX_IMPORT_BYTES } from './utils/dishImport.js';
+import { previewDishImport, saveDishImport } from './services/dishImportService.js';
 import { currentMexicoDate, cycleStartForDate, addDays, DEFAULT_DAY_TYPES } from './utils/dates.js';
 import { saveCycleEdit, saveTemplate, finalizeWishDecline } from './services/cycleService.js';
 import { MAX_HEALTHY_DISHES } from './utils/cyclePlanning.js';
@@ -41,6 +44,7 @@ const state = {
   calendarMode: 'meal', calendarOrganizeSource: null, calendarOrganizeRevision: null, calendarEditor: null, calendarNotice: '', templateDraft: null,
   recentCycles: [], historyLoading: false, historyError: '', backupPreview: null, backupBusy: false,
   backupProgress: '', backupError: '', backupFileName: '',
+  dishImportOpen: false, dishImportText: '', dishImportPreview: null, dishImportBusy: false, dishImportError: '', dishImportMessage: '',
   thumbnails: {}, fullDishPhoto: null, notice: '', gateError: '', formError: '',
 };
 let unsubscribeProfile = null;
@@ -64,6 +68,7 @@ function disconnectFamily() {
   state.calendarEditor = null; state.calendarOrganizeSource = null; state.calendarOrganizeRevision = null; state.calendarNotice = ''; state.templateDraft = null;
   state.backupPreview = null; state.backupBusy = false; state.backupProgress = ''; state.backupError = ''; state.backupFileName = '';
   state.recentCycles = []; state.historyLoading = false; state.historyError = '';
+  state.dishImportOpen = false; state.dishImportText = ''; state.dishImportPreview = null; state.dishImportBusy = false; state.dishImportError = ''; state.dishImportMessage = '';
 }
 function routeName() { return routeFromHash(location.hash); }
 function ensureCalendarUrl() {
@@ -242,6 +247,28 @@ document.addEventListener('click', async (event) => {
       await refreshAdminHistory();
     } catch (error) { state.notice = translateAuthError(error); }
     render(); return;
+  }
+  if (action === 'dish-import-toggle' && state.profile.role === 'admin' && !state.dishImportBusy) {
+    state.dishImportOpen = !state.dishImportOpen;
+    render();
+    if (state.dishImportOpen) document.getElementById('admin-import-recipes')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    return;
+  }
+  if (action === 'admin-dish-import-cancel' && state.profile.role === 'admin') {
+    state.dishImportPreview = null; state.dishImportText = ''; state.dishImportError = ''; state.dishImportMessage = '';
+    render(); return;
+  }
+  if (action === 'admin-dish-import-save' && state.profile.role === 'admin' && state.dishImportPreview && !state.dishImportBusy) {
+    const ready = state.dishImportPreview.filter(row => row.status === 'nueva').length;
+    if (!ready || !window.confirm(`¿Agregar ${ready} ${ready === 1 ? 'receta' : 'recetas'} al recetario? Los platillos duplicados se omitirán.`)) return;
+    state.dishImportBusy = true; state.dishImportError = ''; state.dishImportMessage = ''; render();
+    try {
+      const { created, skipped } = await saveDishImport(state.dishImportPreview, state.user.uid);
+      state.dishImportPreview = null; state.dishImportText = '';
+      state.dishImportMessage = `${created} ${created === 1 ? 'receta importada' : 'recetas importadas'} correctamente.${skipped ? ` ${skipped} omitidas por duplicado.` : ''}`;
+    } catch (error) { state.dishImportError = translateAuthError(error); }
+    finally { state.dishImportBusy = false; render(); }
+    return;
   }
   if (action === 'admin-backup-export' && state.profile.role === 'admin') {
     state.backupBusy = true; state.backupError = ''; state.backupProgress = 'Preparando respaldo...'; render();
@@ -473,6 +500,19 @@ document.addEventListener('submit', async (event) => {
       if (data.password !== data.confirmPassword) throw new Error('Las contraseñas no coinciden.');
       await signUp(data.username, data.password, data.displayName);
     }
+    else if (type === 'admin-dish-import-preview') {
+      if (state.profile.role !== 'admin' || state.dishImportBusy) throw new Error('No tienes permiso para importar recetas.');
+      const file = form.querySelector('[name="importFile"]')?.files?.[0];
+      const pasted = String(data.importText ?? '');
+      // Limpiar la vista previa anterior antes de validar otra selección.
+      state.dishImportBusy = true; state.dishImportPreview = null; state.dishImportError = ''; state.dishImportMessage = ''; render();
+      try {
+        if (file && file.size > MAX_IMPORT_BYTES) throw new Error('El archivo JSON debe pesar menos de 512 KB.');
+        const dishes = parseDishImport(file ? await file.text() : pasted);
+        state.dishImportPreview = await previewDishImport(dishes);
+      } catch (error) { state.dishImportError = translateAuthError(error); }
+      finally { state.dishImportBusy = false; render(); }
+    }
     else if (type === 'admin-template') {
       if (state.profile.role !== 'admin') throw new Error('No tienes permiso para editar esta configuración.');
       const types = Array.from({ length: 14 }, (_, i) => data[`day-${i}`]);
@@ -519,6 +559,7 @@ document.addEventListener('submit', async (event) => {
   finally { if (submit?.isConnected) submit.disabled = false; }
 });
 document.addEventListener('input', (event) => {
+  if (event.target.name === 'importText' && event.target.closest('[data-form="admin-dish-import-preview"]')) state.dishImportText = event.target.value;
   if (event.target.closest('[data-form="dish"]')) {
     state.recipeDraft = Object.fromEntries(new FormData(event.target.form).entries());
   }

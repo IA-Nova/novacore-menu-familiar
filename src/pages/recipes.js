@@ -2,6 +2,7 @@ import { pageHeader, emptyIllustration } from '../components/layout.js';
 import { icon } from '../components/icons.js';
 import { normalizeText, escapeHtml } from '../utils/html.js';
 import { asDataUri } from '../utils/dishPhoto.js';
+import { renderAdminDishImport } from './adminImport.js';
 
 const h = escapeHtml;
 const photoBlock = (photo, name) => {
@@ -68,8 +69,10 @@ export function renderRecipes(state) {
   ${state.recipeNotice ? `<p class="notice-text" role="status">${h(state.recipeNotice)}</p>` : ''}
   ${state.recipeEditor ? dishForm(editor, state.recipeEditor === 'new', state.recipePhotoFile, state.profile.role === 'admin') : ''}
   ${detail && !state.recipeEditor ? dishDetail(detail, state) : ''}
+  ${state.profile.role === 'admin' && state.dishImportOpen ? renderAdminDishImport(state) : ''}
   <section class="surface-card recipes-panel"><div class="recipe-toolbar"><label class="search-box">${icon('search')}<span class="sr-only">Buscar platillos</span><input id="recipe-search" type="search" autocomplete="off" placeholder="Buscar un platillo..." value="${h(state.recipeQuery)}"></label>
     ${!state.recipeEditor ? `<button type="button" class="btn btn-primary" data-action="dish-new">${icon('plus', 17)} Agregar platillo</button>` : ''}
+    ${state.profile.role === 'admin' ? `<button type="button" class="btn btn-outline" data-action="dish-import-toggle">${state.dishImportOpen ? 'Cerrar importación' : 'Importar JSON'}</button>` : ''}
     <div class="recipe-controls"><div class="segmented" aria-label="Filtrar platillos">${[['all','Todos'],['healthy','Saludables'],['mine','Míos'],...(state.profile.role === 'admin' ? [['archived','Archivados']] : [])].map(([k,v]) => `<button data-action="recipe-filter" data-value="${k}" class="${state.recipeFilter === k ? 'selected' : ''}" aria-pressed="${state.recipeFilter === k}">${v}</button>`).join('')}</div>
     <div class="segmented compact-tabs" aria-label="Presentación"><button type="button" aria-label="Tarjetas" title="Tarjetas" data-action="recipe-view" data-value="cards" class="${state.recipeView === 'cards' ? 'selected' : ''}">${icon('grid', 18)}</button><button type="button" aria-label="Lista" title="Lista" data-action="recipe-view" data-value="list" class="${state.recipeView === 'list' ? 'selected' : ''}">${icon('list', 18)}</button></div></div></div>
     <div class="dish-tag-filter"><button type="button" class="${!state.recipeTag ? 'active' : ''}" data-action="recipe-tag" data-value="">Todas las etiquetas</button>${[['postre','Postres'],['bebida','Bebidas']].map(([k,v]) => `<button type="button" data-action="recipe-tag" data-value="${k}" class="${normalizeText(state.recipeTag) === k ? 'active' : ''}">${v}</button>`).join('')}${tags.map(t => `<button type="button" data-action="recipe-tag" data-value="${h(t)}" class="${state.recipeTag === t ? 'active' : ''}">${h(t)}</button>`).join('')}</div>
