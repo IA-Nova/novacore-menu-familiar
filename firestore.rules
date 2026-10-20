@@ -1,0 +1,268 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function signedIn() { return request.auth != null; }
+    function userPath(uid) { return /databases/$(database)/documents/users/$(uid); }
+    function hasProfile(uid) { return exists(userPath(uid)); }
+    function isActive() {
+      return signedIn() && hasProfile(request.auth.uid) &&
+        get(userPath(request.auth.uid)).data.status == 'active';
+    }
+    function isAdmin() {
+      return signedIn() && request.auth.uid == 'To0mq43eJaW8sJm1W3wWzExByRs1' &&
+        hasProfile(request.auth.uid) && get(userPath(request.auth.uid)).data.status == 'active' &&
+        get(userPath(request.auth.uid)).data.role == 'admin';
+    }
+    function validName(name) {
+      return name is string && name.size() >= 2 && name.size() <= 60;
+    }
+    function validNewMember() {
+      let data = request.resource.data;
+      return data.keys().hasOnly(['username','displayName','role','status','approvedAt','approvedBy','createdAt','updatedAt']) &&
+        data.keys().hasAll(['username','displayName','role','status','approvedAt','approvedBy','createdAt','updatedAt']) &&
+        data.username is string && data.username.matches('^[a-z0-9._-]{3,24}$') &&
+        request.auth.token.email == data.username + '@users.novacore' &&
+        validName(data.displayName) && data.role == 'member' && data.status == 'pending' &&
+        data.approvedAt == null && data.approvedBy == null &&
+        data.createdAt == request.time && data.updatedAt == request.time;
+    }
+    function validOwnUpdate() {
+      return request.resource.data.diff(resource.data).affectedKeys().hasOnly(['displayName', 'updatedAt']) &&
+        validName(request.resource.data.displayName) &&
+        request.resource.data.updatedAt == request.time;
+    }
+    function validAdminStatusChange(userId) {
+      return userId != 'To0mq43eJaW8sJm1W3wWzExByRs1' &&
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status','approvedAt','approvedBy','updatedAt']) &&
+        request.resource.data.status in ['active','disabled'] &&
+        request.resource.data.updatedAt == request.time &&
+        ((request.resource.data.status == 'active' &&
+          request.resource.data.approvedAt == request.time &&
+          request.resource.data.approvedBy == request.auth.uid) ||
+         (request.resource.data.status == 'disabled' &&
+          request.resource.data.approvedAt == null && request.resource.data.approvedBy == null));
+    }
+    function validDishData(d) {
+      return d.keys().hasOnly(['name','searchName','description','ingredientsText',
+          'instructionsText','prepMinutes','tags','approvedForHealthyMenu','status',
+          'hasPhoto','createdBy','createdAt','updatedAt']) &&
+        d.keys().hasAll(['name','searchName','description','ingredientsText',
+          'instructionsText','prepMinutes','tags','approvedForHealthyMenu','status',
+          'hasPhoto','createdBy','createdAt','updatedAt']) &&
+        d.name is string && d.name.size() >= 1 && d.name.size() <= 100 &&
+        d.searchName is string && d.searchName.size() >= 1 && d.searchName.size() <= 100 &&
+        d.description is string && d.description.size() <= 1000 &&
+        d.ingredientsText is string && d.ingredientsText.size() <= 5000 &&
+        d.instructionsText is string && d.instructionsText.size() <= 8000 &&
+        (d.prepMinutes == null || (d.prepMinutes is int && d.prepMinutes >= 1 && d.prepMinutes <= 1440)) &&
+        d.tags is list && d.tags.size() <= 10 &&
+        d.approvedForHealthyMenu is bool && d.status in ['active','archived'] &&
+        d.hasPhoto is bool && d.createdBy is string &&
+        d.createdAt is timestamp && d.updatedAt is timestamp;
+    }
+    function photoPath(id) { return /databases/$(database)/documents/dishPhotos/$(id); }
+    function thumbnailPath(id) { return /databases/$(database)/documents/dishThumbnails/$(id); }
+    function photoPresentWhenNeeded(id, d) {
+      return !d.hasPhoto || (existsAfter(photoPath(id)) && existsAfter(thumbnailPath(id)));
+    }
+    function canChangeDish(id) {
+      return isAdmin() || (isActive() && resource.data.createdBy == request.auth.uid &&
+        resource.data.approvedForHealthyMenu == false &&
+        resource.data.status == 'active' &&
+        request.resource.data.approvedForHealthyMenu == false &&
+        request.resource.data.status == resource.data.status);
+    }
+    function canWriteDishImage(id) {
+      return isActive() && existsAfter(/databases/$(database)/documents/dishes/$(id)) &&
+        getAfter(/databases/$(database)/documents/dishes/$(id)).data.hasPhoto == true &&
+        (getAfter(/databases/$(database)/documents/dishes/$(id)).data.status == 'active' || isAdmin()) &&
+        (isAdmin() || (getAfter(/databases/$(database)/documents/dishes/$(id)).data.createdBy == request.auth.uid &&
+          getAfter(/databases/$(database)/documents/dishes/$(id)).data.approvedForHealthyMenu == false));
+    }
+    function validImage(id, thumb) {
+      let d = request.resource.data;
+      return d.keys().hasOnly(['dishId','mimeType','base64','width','height','sizeBytes','updatedAt']) &&
+        d.keys().hasAll(['dishId','mimeType','base64','width','height','sizeBytes','updatedAt']) &&
+        d.dishId == id && d.mimeType == 'image/jpeg' &&
+        d.base64 is string && d.base64.size() >= 4 &&
+        d.base64.size() <= (thumb ? 20480 : 163840) &&
+        d.base64.matches('^[A-Za-z0-9+/]*={0,2}$') &&
+        d.width is int && d.height is int && d.width >= 1 && d.height >= 1 &&
+        d.width <= (thumb ? 320 : 960) && d.height <= (thumb ? 320 : 960) &&
+        d.sizeBytes is int && d.sizeBytes >= 1 &&
+        d.sizeBytes <= (thumb ? 15360 : 122880) && d.updatedAt == request.time;
+    }
+    // Importación administrativa: se protegen UID, rol, username y alta original.
+    function validAdminRestoreProfile(uid) {
+      let d = request.resource.data;
+      return isAdmin() && uid != 'To0mq43eJaW8sJm1W3wWzExByRs1' &&
+        resource.data.role == 'member' && d.role == 'member' &&
+        d.username == resource.data.username &&
+        d.createdAt == resource.data.createdAt &&
+        d.diff(resource.data).affectedKeys().hasOnly(['displayName','status','approvedAt','approvedBy','updatedAt']) &&
+        validName(d.displayName) && d.status in ['pending','active','disabled'] &&
+        ((d.status == 'active' && d.approvedAt == request.time && d.approvedBy == request.auth.uid) ||
+         (d.status != 'active' && d.approvedAt == null && d.approvedBy == null)) &&
+        d.updatedAt == request.time;
+    }
+    function validAdminRestoredDish(d) {
+      return isAdmin() && validDishData(d) && hasProfile(d.createdBy) &&
+        d.createdAt <= request.time && d.updatedAt == request.time;
+    }
+    function validRestoredWish(uid) {
+      let w = request.resource.data;
+      return isAdmin() && hasProfile(uid) && w.keys().hasOnly(['userId','status','dishes','note','createdAt','updatedAt']) &&
+        w.keys().hasAll(['userId','status','dishes','note','createdAt','updatedAt']) &&
+        w.userId == uid && w.status in ['selected','declined'] &&
+        w.note is string && w.note.size() <= 250 &&
+        w.dishes is list && w.dishes.size() <= 6 &&
+        ((w.status == 'declined' && w.dishes.size() == 0 && w.note == '') ||
+         (w.status == 'selected' && w.dishes.size() >= 1 &&
+          restoredDishSnapshot(w.dishes[0]) &&
+          (w.dishes.size() < 2 || restoredDishSnapshot(w.dishes[1])) &&
+          (w.dishes.size() < 3 || restoredDishSnapshot(w.dishes[2])) &&
+          (w.dishes.size() < 4 || restoredDishSnapshot(w.dishes[3])) &&
+          (w.dishes.size() < 5 || restoredDishSnapshot(w.dishes[4])) &&
+          (w.dishes.size() < 6 || restoredDishSnapshot(w.dishes[5])))) &&
+        w.createdAt is timestamp && w.createdAt <= request.time &&
+        w.updatedAt == request.time;
+    }
+    function restoredDishSnapshot(item) {
+      return item is map && item.keys().hasOnly(['dishId','nameSnapshot']) &&
+        item.keys().hasAll(['dishId','nameSnapshot']) &&
+        item.dishId is string && item.dishId.matches('^[A-Za-z0-9_-]{1,64}$') &&
+        item.nameSnapshot is string && item.nameSnapshot.size() >= 1 && item.nameSnapshot.size() <= 100;
+    }
+    match /users/{uid} {
+      allow get: if isAdmin() || (signedIn() && request.auth.uid == uid) ||
+        (isActive() && resource.data.status == 'active');
+      allow list: if isAdmin() || (isActive() && resource.data.status == 'active');
+      allow create: if signedIn() && request.auth.uid == uid && uid != 'To0mq43eJaW8sJm1W3wWzExByRs1' && validNewMember();
+      allow update: if (isActive() && request.auth.uid == uid && validOwnUpdate()) ||
+        (isAdmin() && validAdminStatusChange(uid)) || validAdminRestoreProfile(uid);
+      allow delete: if false;
+    }
+    match /config/{docId} {
+      allow read: if docId == 'app' && isActive();
+      // El lunes de referencia, la zona horaria y la versión no pueden
+      // cambiarse mediante ediciones ordinarias, ni siquiera por accidente.
+      allow create: if docId == 'app' && isAdmin() &&
+        request.resource.data.keys().hasAll(['familyName','timeZone','anchorMonday','maxActiveUsers',
+          'defaultDayTypes','schemaVersion','createdAt','updatedAt']) &&
+        request.resource.data.familyName is string &&
+        request.resource.data.familyName.size() >= 1 && request.resource.data.familyName.size() <= 60 &&
+        request.resource.data.timeZone == 'America/Mexico_City' &&
+        request.resource.data.anchorMonday is string &&
+        request.resource.data.maxActiveUsers == 5 &&
+        request.resource.data.schemaVersion == 1 &&
+        request.resource.data.defaultDayTypes is list &&
+        request.resource.data.defaultDayTypes.size() == 14 &&
+        request.resource.data.defaultDayTypes.toSet().hasOnly(['healthy','wish','free']) &&
+        request.resource.data.createdAt == request.time && request.resource.data.updatedAt == request.time;
+      allow update: if docId == 'app' && isAdmin() &&
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['familyName','defaultDayTypes','updatedAt']) &&
+        request.resource.data.familyName is string &&
+        request.resource.data.familyName.size() >= 1 && request.resource.data.familyName.size() <= 60 &&
+        request.resource.data.defaultDayTypes is list &&
+        request.resource.data.defaultDayTypes.size() == 14 &&
+        request.resource.data.defaultDayTypes.toSet().hasOnly(['healthy','wish','free']) &&
+        request.resource.data.updatedAt == request.time;
+      allow delete: if false;
+    }
+    match /dishes/{dishId} {
+      allow read: if isActive();
+      allow create: if (isActive() && validDishData(request.resource.data) &&
+        request.resource.data.createdBy == request.auth.uid &&
+        request.resource.data.createdAt == request.time &&
+        request.resource.data.updatedAt == request.time &&
+        request.resource.data.status == 'active' &&
+        (request.resource.data.approvedForHealthyMenu == false || isAdmin()) &&
+        photoPresentWhenNeeded(dishId, request.resource.data)) ||
+        (validAdminRestoredDish(request.resource.data) && photoPresentWhenNeeded(dishId, request.resource.data));
+      allow update: if canChangeDish(dishId) && validDishData(request.resource.data) &&
+        request.resource.data.createdBy == resource.data.createdBy &&
+        request.resource.data.createdAt == resource.data.createdAt &&
+        request.resource.data.updatedAt == request.time &&
+        (!request.resource.data.diff(resource.data).affectedKeys().hasAny(['hasPhoto']) ||
+          (request.resource.data.hasPhoto == true &&
+           photoPresentWhenNeeded(dishId, request.resource.data))) &&
+        (isAdmin() ||
+          request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+            'name','searchName','description','ingredientsText','instructionsText',
+            'prepMinutes','tags','hasPhoto','updatedAt']));
+      allow delete: if false;
+    }
+    match /dishPhotos/{dishId} {
+      allow read: if isActive();
+      allow create, update: if canWriteDishImage(dishId) && validImage(dishId, false);
+      allow delete: if false;
+    }
+    match /dishThumbnails/{dishId} {
+      allow read: if isActive();
+      allow create, update: if canWriteDishImage(dishId) && validImage(dishId, true);
+      allow delete: if false;
+    }
+    // Un único documento por UID/ciclo. El plazo es un timestamp administrado
+    // dentro de cycles/{cycleId}; jamás se acepta desde el propio antojo.
+    function cyclePath(cycleId) {
+      return /databases/$(database)/documents/cycles/$(cycleId);
+    }
+    function canEditWish(cycleId, uid) {
+      let cycle = get(cyclePath(cycleId)).data;
+      let cutoff = cycle.wishDeadlines.get(uid, cycle.endAt);
+      return isActive() && request.auth.uid == uid &&
+        cycle.startDate == cycleId && cycle.endAt is timestamp &&
+        cycle.wishDeadlines is map && cycle.lockedWishes is list &&
+        !(uid in cycle.lockedWishes) && cutoff is timestamp &&
+        request.time < cycle.endAt && request.time < cutoff;
+    }
+    function validWishDish(entry) {
+      return entry is map &&
+        entry.keys().hasOnly(['dishId','nameSnapshot']) &&
+        entry.keys().hasAll(['dishId','nameSnapshot']) &&
+        entry.dishId is string && entry.dishId.matches('^[A-Za-z0-9_-]{1,64}$') &&
+        entry.nameSnapshot is string && entry.nameSnapshot.size() >= 1 &&
+        entry.nameSnapshot.size() <= 100 &&
+        get(/databases/$(database)/documents/dishes/$(entry.dishId)).data.status == 'active' &&
+        get(/databases/$(database)/documents/dishes/$(entry.dishId)).data.name == entry.nameSnapshot;
+    }
+    function validWishDishes(entries) {
+      return entries is list && entries.size() >= 1 && entries.size() <= 6 &&
+        entries.toSet().size() == entries.size() &&
+        validWishDish(entries[0]) &&
+        (entries.size() < 2 || validWishDish(entries[1])) &&
+        (entries.size() < 3 || validWishDish(entries[2])) &&
+        (entries.size() < 4 || validWishDish(entries[3])) &&
+        (entries.size() < 5 || validWishDish(entries[4])) &&
+        (entries.size() < 6 || validWishDish(entries[5]));
+    }
+    function validWish(uid) {
+      let wish = request.resource.data;
+      return wish.keys().hasOnly(['userId','status','dishes','note','createdAt','updatedAt']) &&
+        wish.keys().hasAll(['userId','status','dishes','note','createdAt','updatedAt']) &&
+        wish.userId == uid && wish.status in ['selected','declined'] &&
+        wish.note is string && wish.note.size() <= 250 &&
+        wish.dishes is list &&
+        ((wish.status == 'declined' && wish.dishes.size() == 0 && wish.note == '') ||
+         (wish.status == 'selected' && validWishDishes(wish.dishes))) &&
+        wish.createdAt is timestamp && wish.updatedAt == request.time;
+    }
+    match /cycles/{cycleId} {
+      allow read: if isActive();
+      allow create, update: if isAdmin();
+      allow delete: if false;
+      match /wishes/{uid} {
+        allow read: if isActive();
+        allow create: if (canEditWish(cycleId, uid) && validWish(uid) &&
+          request.resource.data.createdAt == request.time) || validRestoredWish(uid);
+        allow update: if ((canEditWish(cycleId, uid) && validWish(uid) &&
+          request.resource.data.createdAt == resource.data.createdAt &&
+          request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+            'status','dishes','note','updatedAt'])) ||
+          (validRestoredWish(uid) && request.resource.data.createdAt == resource.data.createdAt));
+        allow delete: if false;
+      }
+    }
+    match /{document=**} { allow read, write: if false; }
+  }
+}
