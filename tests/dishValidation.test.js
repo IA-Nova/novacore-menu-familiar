@@ -137,7 +137,7 @@ test('la búsqueda encuentra platillos posteriores a la primera página sin puls
   const queryState = { ...uiState, recipeEditor: null, dishes: items, recipeQuery: 'CREPAS', recipePageSize: 24 };
   const html = renderRecipes(queryState);
   assert.match(html, /Crepas con cajeta/);
-  assert.match(html, /<strong>1 platillos<\/strong>/);
+  assert.match(html, /<strong>1 platillo<\/strong>/);
   assert.doesNotMatch(html, /data-action="dish-more"/);
 });
 
@@ -182,4 +182,78 @@ test('la vista de lista mantiene el contenedor de foto aunque no haya imagen', (
   const css = readFileSync(new URL('../src/styles/components.css', import.meta.url), 'utf8');
   assert.match(css, /\.recipe-card\.compact \.dish-card-open\{display:grid;grid-template-columns:/);
   assert.match(css, /\.recipe-list-media>\.dish-photo\{[^}]*object-fit:contain/);
+});
+
+// Filtros múltiples y orden alfabético del catálogo completo.
+test('recetario ordena A-Z por defecto sin distinguir mayúsculas, acentos y con números naturales', async () => {
+  const { matchingRecipeDishes } = await import('../src/pages/recipes.js');
+  const names = ['Zanahorias', 'Ñoquis', 'crepas 12', 'Árroz rojo', 'crepas 2', 'Albóndigas'];
+  const dishes = names.map((name, i) => ({ id: String(i), name, status: 'active', tags: [] }));
+  const base = { ...uiState, recipeEditor: null, dishes, recipeQuery: '', recipeSort: 'az' };
+  assert.deepEqual(matchingRecipeDishes(base).map(d => d.name),
+    ['Albóndigas', 'Árroz rojo', 'crepas 2', 'crepas 12', 'Ñoquis', 'Zanahorias']);
+  assert.deepEqual(matchingRecipeDishes({ ...base, recipeSort: 'za' }).map(d => d.name),
+    ['Zanahorias', 'Ñoquis', 'crepas 12', 'crepas 2', 'Árroz rojo', 'Albóndigas']);
+  assert.deepEqual(matchingRecipeDishes({ ...base, recipeSort: 'recent' }).map(d => d.name), names);
+  const html = renderRecipes(base);
+  assert.match(html, /value="az" selected>Nombre \(A–Z\)/);
+  assert.ok(html.indexOf('<h3>Albóndigas</h3>') < html.indexOf('<h3>Zanahorias</h3>'));
+});
+
+test('los filtros combinan saludable, postre, bebida y etiquetas personales con lógica todas/cualquiera', async () => {
+  const { matchingRecipeDishes } = await import('../src/pages/recipes.js');
+  const dish = (id, name, healthy, tags) => ({ id, name, status: 'active', createdBy: 'admin-uid', approvedForHealthyMenu: healthy, tags });
+  const dishes = [
+    dish('1', 'Atole ligero', true, ['bebida','casero']),
+    dish('2', 'Agua de limón', false, ['bebida']),
+    dish('3', 'Gelatina', true, ['postre','casero']),
+    dish('4', 'Arroz con leche', false, ['postre','casero']),
+    dish('5', 'Ensalada', true, ['casero']),
+  ];
+  const base = { ...uiState, dishes, recipeEditor: null, recipeQuery: '', recipeTags: ['saludable', 'bebida'], recipeMatchMode: 'all' };
+  assert.deepEqual(matchingRecipeDishes(base).map(d => d.name), ['Atole ligero']);
+  assert.deepEqual(matchingRecipeDishes({ ...base, recipeMatchMode: 'any' }).map(d => d.name),
+    ['Agua de limón', 'Atole ligero', 'Ensalada', 'Gelatina']);
+  assert.deepEqual(matchingRecipeDishes({ ...base, recipeTags: ['casero', 'postre'] }).map(d => d.name), ['Arroz con leche', 'Gelatina']);
+  assert.deepEqual(matchingRecipeDishes({ ...base, recipeTags: ['bebida'], recipeQuery: 'LIMON' }).map(d => d.name), ['Agua de limón']);
+  assert.deepEqual(matchingRecipeDishes({ ...base, recipeTags: [] }).length, 5);
+  const html = renderRecipes(base);
+  assert.match(html, /data-value="saludable" class="active" aria-pressed="true"/);
+  assert.match(html, /data-value="bebida" class="active" aria-pressed="true"/);
+  assert.match(html, /data-action="recipe-clear-tags"/);
+  assert.match(html, /data-action="recipe-match-mode"/);
+  assert.match(html, /<strong>1 platillo<\/strong>/);
+});
+
+test('etiquetas personalizadas visibles sin duplicados, ordenadas y escapadas', async () => {
+  const { availableRecipeTags } = await import('../src/pages/recipes.js');
+  const dishes = [
+    { id: 'a', name: '1', status: 'active', tags: ['MEXICANO', 'Casero', 'POSTRE', '<b>'] },
+    { id: 'b', name: '2', status: 'active', tags: ['mexicano', 'á la mexicana', 'bebida'] },
+    { id: 'c', name: '3', status: 'archived', tags: ['reservado'] },
+  ];
+  assert.deepEqual(availableRecipeTags(dishes), ['<b>', 'á la mexicana', 'Casero', 'MEXICANO']);
+  const html = renderRecipes({ ...uiState, recipeEditor: null, dishes });
+  assert.match(html, /data-value="&lt;b&gt;"/);
+  assert.doesNotMatch(html, /data-value="reservado"/);
+  assert.equal((html.match(/data-value="MEXICANO"/g) || []).length, 1);
+});
+
+test('filtrar y ordenar usa todo el catálogo antes de paginar, incluso en modo lista', async () => {
+  const { matchingRecipeDishes } = await import('../src/pages/recipes.js');
+  const dishes = Array.from({length: 40}, (_, i) => ({ id: `id${i}`, name: `Receta ${40-i}`, status: 'active', createdBy: 'admin-uid', tags: i % 2 ? ['bebida'] : ['postre'], approvedForHealthyMenu: i % 2 === 1 }));
+  const state = { ...uiState, recipeEditor: null, dishes, recipeTags: ['bebida', 'saludable'], recipeView: 'list', recipePageSize: 10, recipeSort: 'az' };
+  assert.equal(matchingRecipeDishes(state).length, 20);
+  const html = renderRecipes(state);
+  assert.equal((html.match(/data-action="dish-detail"/g) || []).length, 10);
+  assert.match(html, /Mostrar más platillos/);
+  assert.ok(html.indexOf('Receta 1</h3>') < html.indexOf('Receta 19</h3>'));
+});
+
+test('main.js permite añadir y retirar múltiples etiquetas, limpiar y cambiar orden', () => {
+  const main = readFileSync(new URL('../src/main.js', import.meta.url), 'utf8');
+  assert.match(main, /state\.recipeTags\.includes\(tag\)/);
+  assert.match(main, /action === 'recipe-clear-tags'/);
+  assert.match(main, /action === 'recipe-match-mode'/);
+  assert.match(main, /event\.target\.id === 'recipe-sort'/);
 });

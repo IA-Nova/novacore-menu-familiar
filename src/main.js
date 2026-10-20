@@ -32,13 +32,14 @@ import { translateAuthError } from './utils/account.js';
 import { prepareWishCycle, saveMyWish } from './services/wishService.js';
 import { wishCanEdit } from './utils/wishValidation.js';
 import { validateDish } from './utils/dishValidation.js';
+import { normalizeText } from './utils/html.js';
 
 const app = document.getElementById('app');
 const state = {
   phase: firebaseConfigured ? 'loading' : 'unavailable', user: null, profile: null, config: null,
   familyUsers: [], adminUsers: [], dishes: [], wishes: [], cycle: null,
   calendarView: 'week', weekIndex: 0, cycleOffset: 0,
-  recipeQuery: '', recipeFilter: 'all', recipeView: 'cards', recipeTag: '', recipePageSize: 24,
+  recipeQuery: '', recipeFilter: 'all', recipeView: 'cards', recipeTags: [], recipeMatchMode: 'all', recipeSort: 'az', recipePageSize: 24,
   recipeEditor: null, recipeDetailId: null, recipePhotoFile: null, recipeDraft: null, recipeNotice: '',
   wishDraft: null, wishSearch: '', wishNotice: '',
   calendarMode: 'meal', calendarOrganizeSource: null, calendarOrganizeRevision: null, calendarEditor: null, calendarNotice: '', templateDraft: null,
@@ -429,7 +430,7 @@ document.addEventListener('click', async (event) => {
     } catch (error) { state.wishNotice = translateAuthError(error); }
     render(); return;
   }
-  if (action === 'recipe-filter') { state.recipeFilter = value; state.recipeTag = ''; state.recipePageSize = 24; }
+  if (action === 'recipe-filter') { state.recipeFilter = value; state.recipePageSize = 24; render(); return; }
   if (action === 'recipe-view') state.recipeView = value;
   if (action === 'dish-new') {
     state.recipeEditor = 'new'; state.recipeDetailId = null; state.recipePhotoFile = null; state.recipeDraft = null; state.recipeNotice = '';
@@ -472,7 +473,19 @@ document.addEventListener('click', async (event) => {
     } catch (error) { state.recipeNotice = translateAuthError(error); }
     render(); return;
   }
-  if (action === 'recipe-tag') { state.recipeTag = value; state.recipePageSize = 24; render(); return; }
+  if (action === 'recipe-tag') {
+    const tag = normalizeText(value);
+    if (!tag) return;
+    state.recipeTags = state.recipeTags.includes(tag)
+      ? state.recipeTags.filter(item => item !== tag) : [...state.recipeTags, tag];
+    state.recipePageSize = 24; render(); return;
+  }
+  if (action === 'recipe-clear-tags') {
+    state.recipeTags = []; state.recipeMatchMode = 'all'; state.recipePageSize = 24; render(); return;
+  }
+  if (action === 'recipe-match-mode' && ['all', 'any'].includes(value)) {
+    state.recipeMatchMode = value; state.recipePageSize = 24; render(); return;
+  }
   if (action === 'dish-more') { state.recipePageSize += 24; render(); return; }
   if (action === 'approve-user' || action === 'disable-user') {
     const user = state.adminUsers.find((u) => u.uid === value);
@@ -573,6 +586,9 @@ document.addEventListener('input', (event) => {
   if (event.target.id === 'recipe-search') { state.recipeQuery = event.target.value; state.recipePageSize = 24; render({ focusSearch: true }); }
 });
 document.addEventListener('change', async (event) => {
+  if (event.target.id === 'recipe-sort' && ['az', 'za', 'recent'].includes(event.target.value)) {
+    state.recipeSort = event.target.value; state.recipePageSize = 24; render(); return;
+  }
   if (event.target.id === 'admin-backup-file' && state.profile?.role === 'admin') {
     const file = event.target.files?.[0];
     state.backupPreview = null; state.backupFileName = file?.name || '';

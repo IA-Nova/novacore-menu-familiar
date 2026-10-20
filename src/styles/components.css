@@ -123,3 +123,21 @@
 .dish-categories legend{font-weight:750;font-size:.84rem;color:var(--color-text);padding:0 6px}
 .dish-choice{display:inline-flex;align-items:center;gap:9px;font-size:.85rem;font-weight:650;min-height:34px;cursor:pointer}
 .dish-choice input{width:18px;height:18px;accent-color:var(--color-primary);cursor:pointer}
+
+/* Recetario: filtros combinables y orden alfabético */
+.recipe-filter-area{margin-top:17px;padding:15px;border:1px solid var(--color-border);border-radius:14px;background:#FBF9FD}
+.recipe-filter-heading{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap}
+.recipe-filter-heading strong{font-size:.84rem;color:var(--color-text)}
+.recipe-clear-filters{background:transparent;border:0;padding:5px 3px;color:var(--color-primary);font-size:.76rem;font-weight:750;cursor:pointer;text-decoration:underline;text-underline-offset:3px}
+.recipe-filter-area .dish-tag-filter{margin-top:11px;gap:8px}
+.recipe-filter-area .dish-tag-filter button{display:inline-flex;gap:5px;align-items:center;border-radius:999px;padding:8px 12px;color:var(--color-primary);font-size:.79rem;transition:background .12s,border-color .12s}
+.recipe-filter-area .dish-tag-filter button.active{background:var(--color-primary);border-color:var(--color-primary);color:#fff}
+.recipe-filter-area .dish-tag-filter button:focus-visible,.recipe-clear-filters:focus-visible{outline:2px solid var(--color-secondary);outline-offset:3px}
+.recipe-match-controls{display:flex;align-items:center;flex-wrap:wrap;gap:10px;margin-top:15px;padding-top:12px;border-top:1px solid var(--color-border)}
+.recipe-match-controls>span{font-size:.75rem;color:var(--color-muted)}
+.recipe-match-controls .segmented button{padding:6px 12px}
+.recipe-sort-control{display:inline-flex;align-items:center;gap:8px;font-size:.76rem;font-weight:700;color:var(--color-muted)}
+.recipe-sort-control select{font:inherit;font-size:.79rem;color:var(--color-text);background:#fff;border:1px solid var(--color-border);border-radius:9px;padding:8px 10px;max-width:185px}
+.recipe-sort-control select:focus-visible{outline:2px solid var(--color-secondary);outline-offset:2px}
+@media(max-width:760px){.recipe-toolbar .recipe-controls{gap:8px;align-items:center}.recipe-sort-control{margin-left:auto}.recipe-filter-area{padding:12px}.recipe-filter-area .dish-tag-filter button{padding:8px 10px}}
+@media(max-width:390px){.recipe-sort-control{margin-left:0}.recipe-sort-control select{max-width:150px}}
