@@ -1,4 +1,5 @@
-import { pageHeader } from '../components/layout.js';
+import { pageHeader, emptyIllustration } from '../components/layout.js';
+import { asDataUri } from '../utils/dishPhoto.js';
 import { escapeHtml, normalizeText } from '../utils/html.js';
 import { currentMexicoDate, cycleStartForDate, formatDate, addDays } from '../utils/dates.js';
 import { wishCanEdit, wishEditDeadline, MAX_WISH_DISHES, MAX_WISH_NOTE } from '../utils/wishValidation.js';
@@ -16,18 +17,38 @@ function statusFor(wish, date) {
   if (wish?.status === 'selected') return date ? 'scheduled' : 'selected';
   return 'pending';
 }
+export function matchingWishDishes(state) {
+  const q = normalizeText(state.wishSearch || '');
+  return (state.dishes || []).filter(d => d.status === 'active' && normalizeText(d.name).includes(q) &&
+    matchesDishTags(d, state.wishTags, state.wishMatchMode === 'any' ? 'any' : 'all', state.wishExcludeTags));
+}
+
+export function visibleWishDishes(state) {
+  return state.wishDraft ? matchingWishDishes(state).slice(0, state.recipePageSize || 24) : [];
+}
+
 function picker(state) {
   const draft = state.wishDraft;
-  const q = normalizeText(state.wishSearch || '');
+  const includedTags = cleanTagSelection(state.wishTags);
   const excludedTags = cleanTagSelection(state.wishExcludeTags);
-  const matches = state.dishes.filter(d => d.status === 'active' && normalizeText(d.name).includes(q) &&
-    matchesDishTags(d, [], 'all', excludedTags));
+  const matches = matchingWishDishes(state);
+  const includeButton = (tag, label) => {
+    const active = includedTags.includes(normalizeText(tag));
+    return `<button type="button" data-action="wish-include-tag" data-value="${h(tag)}" aria-pressed="${active}" class="${active ? 'active' : ''}">${h(label)}</button>`;
+  };
   const excludeButton = (tag, label) => {
     const active = excludedTags.includes(normalizeText(tag));
     return `<button type="button" data-action="wish-exclude-tag" data-value="${h(tag)}" aria-pressed="${active}" class="${active ? 'active is-excluded' : ''}">${h(label)}</button>`;
   };
   const customTags = availableRecipeTags(state.dishes);
-  const available = matches.slice(0, state.recipePageSize);
+  const available = visibleWishDishes(state);
+  const filtersActive = includedTags.length + excludedTags.length;
+  const options = available.map(d => {
+    const selected = draft.selection.includes(d.id);
+    const imageSrc = asDataUri(state.thumbnails?.[d.id]);
+    const image = imageSrc ? `<img class="wish-option-photo" loading="lazy" src="${imageSrc}" alt="">` : emptyIllustration();
+    return `<button type="button" data-action="wish-toggle-dish" data-value="${h(d.id)}" class="wish-option ${selected ? 'is-selected' : ''}" aria-pressed="${selected}" aria-label="${selected ? 'Quitar' : 'Agregar'} ${h(d.name)}"><span class="wish-option-media">${image}</span><span class="wish-option-info"><span class="wish-option-name">${h(d.name)}</span><span class="wish-option-action">${selected ? 'Seleccionado ✓' : 'Agregar +'}</span></span></button>`;
+  }).join('');
   const selected = draft.selection.map(id => {
     const dish = state.dishes.find(d => d.id === id);
     return { id, name: dish?.name || draft.newNames[id] || 'Platillo no disponible' };
@@ -38,9 +59,12 @@ function picker(state) {
     <div class="wish-picked"><strong>Mi selección (${selected.length}/${MAX_WISH_DISHES})</strong>
     ${selected.length ? `<div class="wish-picked-list">${selected.map(d => `<button type="button" data-action="wish-remove-dish" data-value="${h(d.id)}" class="wish-picked-tag">${h(d.name)} <span aria-label="Quitar">×</span></button>`).join('')}</div>` : '<p class="muted-label">Todavía no has elegido platillos.</p>'}</div>
     <label class="dish-field"><span>Buscar platillos</span><input id="wish-search" type="search" autocomplete="off" placeholder="Buscar en el recetario..." value="${h(state.wishSearch || '')}"></label>
-    <div class="wish-exclude-area"><div class="recipe-filter-heading"><strong>Excluir de la búsqueda</strong>${excludedTags.length ? '<button type="button" data-action="wish-clear-excludes" class="recipe-clear-filters">Quitar exclusiones</button>' : ''}</div>
-      <div class="dish-tag-filter exclude-tag-filter" role="group" aria-label="Excluir etiquetas al elegir antojo">${excludeButton('saludable','Saludable')}${excludeButton('postre','Postre')}${excludeButton('bebida','Bebida')}${customTags.map(tag => excludeButton(tag,tag)).join('')}</div></div>
-    <div class="wish-options">${available.length ? available.map(d => `<button type="button" data-action="wish-toggle-dish" data-value="${h(d.id)}" class="wish-option ${draft.selection.includes(d.id) ? 'is-selected' : ''}" aria-pressed="${draft.selection.includes(d.id)}"><span>${h(d.name)}</span><span>${draft.selection.includes(d.id) ? 'Seleccionado ✓' : 'Agregar +'}</span></button>`).join('') : '<p class="muted-label">No hay platillos que coincidan.</p>'}</div>
+    <div class="wish-filter-area"><div class="recipe-filter-heading"><strong>Filtrar platillos</strong>${filtersActive ? '<button type="button" data-action="wish-clear-filters" class="recipe-clear-filters">Quitar filtros (' + filtersActive + ')</button>' : ''}</div>
+      <p class="tag-filter-label">Incluir etiquetas</p><div class="dish-tag-filter" role="group" aria-label="Incluir etiquetas al elegir antojo">${includeButton('saludable','Saludable')}${includeButton('postre','Postre')}${includeButton('bebida','Bebida')}${customTags.map(tag => includeButton(tag,tag)).join('')}</div>
+      ${includedTags.length > 1 ? `<div class="recipe-match-controls"><span>Mostrar platillos que tengan:</span><div class="segmented" aria-label="Modo de combinación de etiquetas en Mi antojo"><button type="button" data-action="wish-match-mode" data-value="all" class="${state.wishMatchMode !== 'any' ? 'selected' : ''}" aria-pressed="${state.wishMatchMode !== 'any'}">Todas</button><button type="button" data-action="wish-match-mode" data-value="any" class="${state.wishMatchMode === 'any' ? 'selected' : ''}" aria-pressed="${state.wishMatchMode === 'any'}">Cualquiera</button></div></div>` : ''}
+      <p class="tag-filter-label">Excluir etiquetas</p><div class="dish-tag-filter exclude-tag-filter" role="group" aria-label="Excluir etiquetas al elegir antojo">${excludeButton('saludable','Saludable')}${excludeButton('postre','Postre')}${excludeButton('bebida','Bebida')}${customTags.map(tag => excludeButton(tag,tag)).join('')}</div></div>
+    <p class="muted-label wish-results-count">${matches.length} ${matches.length === 1 ? 'platillo disponible' : 'platillos disponibles'}</p>
+    <div class="wish-options">${available.length ? options : '<p class="muted-label">No hay platillos que coincidan.</p>'}</div>
     ${matches.length > available.length ? '<button type="button" class="btn btn-outline btn-small" data-action="dish-more">Mostrar más platillos</button>' : ''}
     <form data-form="wish-quick-dish" class="wish-quick-add"><label for="wish-new-name">¿Falta algún platillo?</label><div class="wish-quick-row"><input required maxlength="100" name="name" id="wish-new-name" placeholder="Nombre del nuevo platillo"><button type="submit" class="btn btn-outline">Agregar al recetario</button></div><p class="muted-label">Se añadirá también a tu selección.</p></form>
     <form data-form="wish" class="wish-save-form"><div class="dish-field"><label for="wish-note">Indicaciones para preparar el antojo (opcional)</label><textarea id="wish-note" name="note" rows="3" maxlength="${MAX_WISH_NOTE}" placeholder="Ej. Preparar los pambazos en versión de tinga">${h(draft.note)}</textarea></div><div class="wish-editor-buttons"><button type="submit" class="btn btn-primary" ${!draft.selection.length ? 'disabled' : ''}>Guardar mi antojo</button><button type="button" class="btn btn-outline" data-action="wish-decline">No quiero antojo este ciclo</button></div></form>

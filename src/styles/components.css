@@ -166,3 +166,26 @@
 .recipe-filter-area .exclude-tag-filter button.active.is-excluded { background: #e9dff3; color: #514163; border-color: #a58cbc; }
 .wish-exclude-area { margin: 12px 0; padding: 12px; background: #fbf9fd; border: 1px solid var(--color-border); border-radius: 12px; }
 .wish-exclude-area .dish-tag-filter { margin-top: 10px; }
+
+/* Selector de antojos: filtros de inclusión/exclusión y tarjetas horizontales con foto. */
+.wish-filter-area{margin:12px 0 14px;padding:13px 15px;background:#fbf9fd;border:1px solid var(--color-border);border-radius:13px}
+.wish-filter-area .dish-tag-filter{margin-top:9px;gap:8px}
+.wish-filter-area .dish-tag-filter button{display:inline-flex;align-items:center;gap:5px;border-radius:999px;padding:8px 12px;font-size:.78rem;font-weight:650;color:var(--color-primary)}
+.wish-filter-area .dish-tag-filter button.active{background:var(--color-primary);border-color:var(--color-primary);color:#fff}
+.wish-filter-area .exclude-tag-filter button.active.is-excluded{background:#e9dff3;color:#514163;border-color:#a58cbc}
+.wish-filter-area .dish-tag-filter button:focus-visible,.wish-option:focus-visible{outline:2px solid var(--color-secondary);outline-offset:2px}
+.wish-results-count{margin:9px 0 0;font-size:.78rem}
+.wish-options{grid-template-columns:repeat(auto-fill,minmax(min(100%,310px),1fr));gap:11px;margin:12px 0 19px}
+.wish-option{display:grid;grid-template-columns:100px minmax(0,1fr);align-items:stretch;gap:0;min-width:0;min-height:106px;padding:0;overflow:hidden;transition:border-color .12s,background .12s}
+.wish-option:hover{border-color:var(--color-secondary)}
+.wish-option-media{position:relative;display:block;overflow:hidden;background:var(--color-lavender-soft);border-right:1px solid var(--color-border);min-width:0;min-height:100%}
+.wish-option-photo{display:block;position:absolute;inset:0;width:100%;height:100%;object-fit:contain;object-position:center}
+.wish-option-media .food-illustration{position:absolute;inset:0;width:100%;height:100%;min-height:0;aspect-ratio:auto;border-radius:0}
+.wish-option-media .plate-outer{width:72px;height:72px;border-width:8px}
+.wish-option-media .plate-inner{width:47px;height:47px}
+.wish-option-media .plate-inner svg{width:22px;height:22px}
+.wish-option-info{display:flex;flex-direction:column;align-items:flex-start;gap:10px;justify-content:space-between;min-width:0;padding:12px 13px}
+.wish-option .wish-option-name{font-weight:700;font-size:.85rem;line-height:1.35;overflow-wrap:anywhere;white-space:normal}
+.wish-option .wish-option-info .wish-option-action{font-size:.75rem;line-height:1.2;font-weight:750;white-space:normal;color:var(--color-primary);background:var(--color-lavender-soft);border-radius:7px;padding:6px 10px}
+.wish-option.is-selected .wish-option-action{background:#e6dbf3}
+@media(max-width:600px){.wish-options{grid-template-columns:1fr}.wish-option{grid-template-columns:96px minmax(0,1fr);min-height:103px}.wish-option-info{padding:11px 12px}.wish-filter-area{padding:12px}}

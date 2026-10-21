@@ -8,7 +8,7 @@ import './styles/suggestions.css';
 import { pageLayout } from './components/layout.js';
 import { routeFromHash, needsCalendarRedirect } from './utils/navigationRoutes.js';
 import { renderCalendar } from './pages/calendar.js';
-import { renderWishes } from './pages/wishes.js';
+import { renderWishes, visibleWishDishes } from './pages/wishes.js';
 import { renderRecipes, visibleRecipeDishes } from './pages/recipes.js';
 import { renderSuggestions } from './pages/suggestions.js';
 import { pickFamilySuggestion } from './utils/dishSuggestions.js';
@@ -47,7 +47,7 @@ const state = {
   recipeQuery: '', recipeFilter: 'all', recipeView: 'cards', recipeTags: [], recipeExcludeTags: [], recipeMatchMode: 'all', recipeSort: 'az', recipePageSize: 24,
   suggestionTags: [], suggestionExcludeTags: [], suggestionMatchMode: 'all', suggestionDishId: null,
   recipeEditor: null, recipeDetailId: null, recipePhotoFile: null, recipeDraft: null, recipeNotice: '',
-  wishDraft: null, wishSearch: '', wishExcludeTags: [], wishNotice: '',
+  wishDraft: null, wishSearch: '', wishTags: [], wishExcludeTags: [], wishMatchMode: 'all', wishNotice: '',
   calendarMode: 'meal', calendarOrganizeSource: null, calendarOrganizeRevision: null, calendarEditor: null, calendarNotice: '', templateDraft: null,
   recentCycles: [], historyLoading: false, historyError: '', backupPreview: null, backupBusy: false,
   backupProgress: '', backupError: '', backupFileName: '',
@@ -71,7 +71,7 @@ function disconnectFamily() {
   currentCycleId = '';
   state.familyUsers = []; state.adminUsers = []; state.dishes = []; state.dishVotes = {}; state.dishVotesLoaded = false; state.voteBusyDishId = null; state.wishes = []; state.config = null; state.cycle = null;
   state.thumbnails = {}; state.fullDishPhoto = null; state.recipeEditor = null; state.recipeDetailId = null; state.recipeDraft = null;
-  state.wishDraft = null; state.wishSearch = ''; state.wishExcludeTags = []; state.wishNotice = '';
+  state.wishDraft = null; state.wishSearch = ''; state.wishTags = []; state.wishExcludeTags = []; state.wishMatchMode = 'all'; state.wishNotice = '';
   state.calendarEditor = null; state.calendarOrganizeSource = null; state.calendarOrganizeRevision = null; state.calendarNotice = ''; state.templateDraft = null;
   state.backupPreview = null; state.backupBusy = false; state.backupProgress = ''; state.backupError = ''; state.backupFileName = '';
   state.recentCycles = []; state.historyLoading = false; state.historyError = '';
@@ -118,6 +118,10 @@ async function loadThumbnailIds(ids) {
     } finally { thumbnailRequests.delete(id); }
   }));
   if (state.phase === 'active') render();
+}
+async function loadWishThumbnails() {
+  if (state.phase !== 'active' || routeName() !== 'antojos' || !state.wishDraft) return;
+  await loadThumbnailIds(visibleWishDishes(state).filter(d => d.hasPhoto).map(d => d.id));
 }
 async function loadRecipeThumbnails() {
   if (state.phase !== 'active' || routeName() !== 'recetario') return;
@@ -174,6 +178,7 @@ function render({ scroll = false, focusSearch = false } = {}) {
   const route = renderers[requested] && (requested !== 'administracion' || state.profile.role === 'admin') ? requested : 'calendario';
   app.innerHTML = pageLayout(route, renderers[route](), { ...state.profile, familyName: state.config?.familyName });
   if (route === 'recetario') void loadRecipeThumbnails();
+  if (route === 'antojos' && state.wishDraft) void loadWishThumbnails();
   if (route === 'sugerencias' && state.suggestionDishId) void loadThumbnailIds([state.suggestionDishId]);
   document.title = `${titles[route]} | NovaCore Menú Familiar`;
   if (focusSearch && route === 'recetario') {
@@ -478,18 +483,29 @@ document.addEventListener('click', async (event) => {
     const wish = state.wishes.find(w => w.userId === state.user.uid);
     state.wishDraft = { selection: wish?.status === 'selected' ? wish.dishes.map(d => d.dishId) : [],
       note: wish?.status === 'selected' ? wish.note || '' : '', newNames: {} };
-    state.wishNotice = ''; state.wishSearch = ''; state.wishExcludeTags = [];
+    state.wishNotice = ''; state.wishSearch = ''; state.wishTags = []; state.wishExcludeTags = []; state.wishMatchMode = 'all';
     render(); document.getElementById('wish-editor')?.scrollIntoView({ block: 'start', behavior: 'smooth' }); return;
   }
-  if (action === 'wish-cancel') { state.wishDraft = null; state.wishSearch = ''; state.wishExcludeTags = []; render(); return; }
-  if (action === 'wish-exclude-tag' && state.wishDraft) {
+  if (action === 'wish-cancel') { state.wishDraft = null; state.wishSearch = ''; state.wishTags = []; state.wishExcludeTags = []; state.wishMatchMode = 'all'; render(); return; }
+  if (action === 'wish-include-tag' && state.wishDraft) {
     const tag = normalizeText(value); if (!tag) return;
-    state.wishExcludeTags = state.wishExcludeTags.includes(tag)
-      ? state.wishExcludeTags.filter(item => item !== tag) : [...state.wishExcludeTags, tag];
+    const active = state.wishTags.includes(tag);
+    state.wishTags = active ? state.wishTags.filter(item => item !== tag) : [...state.wishTags, tag];
+    if (!active) state.wishExcludeTags = state.wishExcludeTags.filter(item => item !== tag);
     state.recipePageSize = 24; render(); return;
   }
-  if (action === 'wish-clear-excludes' && state.wishDraft) {
-    state.wishExcludeTags = []; state.recipePageSize = 24; render(); return;
+  if (action === 'wish-exclude-tag' && state.wishDraft) {
+    const tag = normalizeText(value); if (!tag) return;
+    const active = state.wishExcludeTags.includes(tag);
+    state.wishExcludeTags = active ? state.wishExcludeTags.filter(item => item !== tag) : [...state.wishExcludeTags, tag];
+    if (!active) state.wishTags = state.wishTags.filter(item => item !== tag);
+    state.recipePageSize = 24; render(); return;
+  }
+  if ((action === 'wish-clear-filters' || action === 'wish-clear-excludes') && state.wishDraft) {
+    state.wishTags = []; state.wishExcludeTags = []; state.wishMatchMode = 'all'; state.recipePageSize = 24; render(); return;
+  }
+  if (action === 'wish-match-mode' && state.wishDraft && ['all', 'any'].includes(value)) {
+    state.wishMatchMode = value; state.recipePageSize = 24; render(); return;
   }
   if (action === 'wish-toggle-dish' || action === 'wish-remove-dish') {
     if (!state.wishDraft || !canEditCurrentWish()) return;
