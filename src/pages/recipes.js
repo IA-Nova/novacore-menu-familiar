@@ -133,11 +133,10 @@ export function renderRecipes(state) {
           <h3>${name}</h3>
           ${dish.description ? `<p class="recipe-list-description">${h(dish.description)}</p>` : ''}
           <div class="recipe-list-badges">${badge}${dish.prepMinutes ? `<span class="recipe-list-time">${icon('clock', 14)} ${Number(dish.prepMinutes)} min</span>` : ''}${labels}</div>
-          <p class="recipe-list-author">${h(authorName(dish, state))}</p>
         </div></button>${dishVoteControls(dish, state, true)}</article>`;
     }
     return `<article class="recipe-card">${opening}${photo}<div class="recipe-content"><div class="recipe-meta">${badge}</div>
-      <h3>${name}</h3><p>${h(authorName(dish, state))}</p>${labels}</div></button>${dishVoteControls(dish, state, true)}</article>`;
+      <h3>${name}</h3>${labels}</div></button>${dishVoteControls(dish, state, true)}</article>`;
   }).join('');
   const tags = availableRecipeTags(state.dishes);
   const selectedTags = cleanTagSelection(selectedRecipeTags(state));
