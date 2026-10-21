@@ -92,3 +92,20 @@ test('la sección se incluye en navegación móvil y se enlaza con votos y fotos
   assert.match(main, /pickFamilySuggestion\(/);
   assert.match(main, /loadThumbnailIds\(\[state.suggestionDishId\]\)/);
 });
+
+
+test('exclusión de Postre y Bebida conserva platos principales y se combina con Saludable', () => {
+  assert.deepEqual(suggestionCandidates(dishes, [], 'all', ['postre','bebida']).map(d => d.id), ['tinga','verduras']);
+  assert.deepEqual(suggestionCandidates(dishes, ['saludable'], 'all', ['postre','bebida']).map(d => d.id), ['tinga','verduras']);
+  assert.deepEqual(suggestionCandidates(dishes, ['saludable','bebida'], 'any', ['bebida']).map(d => d.id), ['tinga','verduras']);
+  assert.deepEqual(suggestionCandidates(dishes, [], 'all', ['saludable']).map(d => d.id), ['crepas']);
+  assert.equal(pickFamilySuggestion({ dishes, excludedTags: ['postre', 'bebida'], votesByDish, familyUsers }, () => .99).dish.id, 'verduras');
+});
+
+test('la pantalla de sugerencias ofrece exclusiones y descarta un resultado al cambiar filtros', () => {
+  const html = renderSuggestions({ ...state, suggestionExcludeTags: ['bebida','postre'] });
+  assert.match(html, /Excluir etiquetas/);
+  assert.match(html, /data-action="suggestion-exclude-tag" data-value="bebida" aria-pressed="true"/);
+  assert.match(html, /2 recetas disponibles/);
+  assert.match(html, /data-action="suggestion-clear"/);
+});

@@ -236,7 +236,7 @@ test('etiquetas personalizadas visibles sin duplicados, ordenadas y escapadas', 
   const html = renderRecipes({ ...uiState, recipeEditor: null, dishes });
   assert.match(html, /data-value="&lt;b&gt;"/);
   assert.doesNotMatch(html, /data-value="reservado"/);
-  assert.equal((html.match(/data-value="MEXICANO"/g) || []).length, 1);
+  assert.equal((html.match(/data-value="MEXICANO"/g) || []).length, 2); // Incluir y Excluir
 });
 
 test('filtrar y ordenar usa todo el catálogo antes de paginar, incluso en modo lista', async () => {
@@ -291,4 +291,22 @@ test('editor de receta saludable ajena mantiene visible su etiqueta sin permitir
   assert.match(page, /<span class="pill healthy">Saludable<\/span>/);
   assert.doesNotMatch(page, /name="approvedForHealthyMenu"/);
   assert.match(page, /name="tags"/);
+});
+
+
+test('recetario permite excluir bebida y postre sin romper la búsqueda global ni el orden alfabético', async () => {
+  const { matchingRecipeDishes } = await import('../src/pages/recipes.js');
+  const dishes = [
+    { id:'b', name:'Crepas', tags:['postre'], status:'active', approvedForHealthyMenu:false },
+    { id:'c', name:'Agua de jamaica', tags:['bebida'], status:'active', approvedForHealthyMenu:true },
+    { id:'a', name:'Arroz', tags:[], status:'active', approvedForHealthyMenu:true },
+    { id:'d', name:'Pollo a la mexicana', tags:['casero'], status:'active', approvedForHealthyMenu:true },
+  ];
+  const state = { ...uiState, dishes, recipeTags:['saludable'], recipeExcludeTags:['postre','bebida'], recipeSort:'az', recipeQuery:'' };
+  assert.deepEqual(matchingRecipeDishes(state).map(d=>d.name), ['Arroz','Pollo a la mexicana']);
+  const html = renderRecipes(state);
+  assert.match(html, /Excluir etiquetas/);
+  assert.match(html, /data-action="recipe-exclude-tag" data-value="bebida" class="active is-excluded"/);
+  assert.match(html, /Quitar filtros \(3\)/);
+  assert.equal((html.match(/data-action="dish-detail"/g)||[]).length, 2);
 });

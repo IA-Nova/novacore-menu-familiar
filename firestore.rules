@@ -231,14 +231,16 @@ service cloud.firestore {
     function cyclePath(cycleId) {
       return /databases/$(database)/documents/cycles/$(cycleId);
     }
-    function canEditWish(cycleId, uid) {
+    function canEditWish(cycleId, uid, alreadySelected) {
       let cycle = get(cyclePath(cycleId)).data;
       let cutoff = cycle.wishDeadlines.get(uid, cycle.endAt);
       return isActive() && request.auth.uid == uid &&
         cycle.startDate == cycleId && cycle.endAt is timestamp &&
         cycle.wishDeadlines is map && cycle.lockedWishes is list &&
-        !(uid in cycle.lockedWishes) && cutoff is timestamp &&
-        request.time < cycle.endAt && request.time < cutoff;
+        cutoff is timestamp &&
+        request.time < cycle.endAt &&
+        (!alreadySelected || !(uid in cycle.wishDeadlines) ||
+          request.time < cutoff - duration.value(1, 'd'));
     }
     function validWishDish(entry) {
       return entry is map &&
@@ -277,9 +279,9 @@ service cloud.firestore {
       allow delete: if false;
       match /wishes/{uid} {
         allow read: if isActive();
-        allow create: if (canEditWish(cycleId, uid) && validWish(uid) &&
+        allow create: if (canEditWish(cycleId, uid, false) && validWish(uid) &&
           request.resource.data.createdAt == request.time) || validRestoredWish(uid);
-        allow update: if ((canEditWish(cycleId, uid) && validWish(uid) &&
+        allow update: if ((canEditWish(cycleId, uid, resource.data.status == 'selected') && validWish(uid) &&
           request.resource.data.createdAt == resource.data.createdAt &&
           request.resource.data.diff(resource.data).affectedKeys().hasOnly([
             'status','dishes','note','updatedAt'])) ||

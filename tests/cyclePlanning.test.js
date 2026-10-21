@@ -57,21 +57,21 @@ test('cambiar día a libre limpia platillos y propietario pero no cambia los dem
   assert.equal(cycle.days[1].type, 'wish');
 });
 
-test('fecha asignada: corte exacto al inicio del día local de preparación', () => {
+test('fecha programada: se bloquea desde la medianoche del día anterior en México', () => {
   const cycle = initial(); cycle.days[1].wishUserId = 'ana';
   const updated = withPlanningDeadlines(cycle, cycle, early);
   assert.equal(updated.wishDeadlines.ana.toISOString(), '2026-10-20T06:00:00.000Z');
-  assert.equal(wishCanEdit(updated, 'ana', new Date('2026-10-20T05:59:59Z')), true);
-  assert.equal(wishCanEdit(updated, 'ana', new Date('2026-10-20T06:00:00Z')), false);
+  assert.equal(wishCanEdit(updated, 'ana', new Date('2026-10-19T05:59:59Z')), true);
+  assert.equal(wishCanEdit(updated, 'ana', new Date('2026-10-19T06:00:00Z')), false);
 });
 
-test('mover a una fecha futura no vuelve a abrir un antojo ya vencido', () => {
+test('mover la fecha programada más adelante permite volver a editar', () => {
   const cycle = initial(); cycle.days[1].wishUserId = 'ana';
   const first = withPlanningDeadlines(cycle, cycle, early);
   const moved = moveDayContent(first, '2026-10-20', '2026-10-26');
   const next = withPlanningDeadlines(first, moved, new Date('2026-10-20T17:00:00Z'));
-  assert.equal(next.lockedWishes.includes('ana'), true);
-  assert.equal(wishCanEdit(next, 'ana', new Date('2026-10-20T18:00:00Z')), false);
+  assert.equal(next.lockedWishes.includes('ana'), false);
+  assert.equal(wishCanEdit(next, 'ana', new Date('2026-10-20T18:00:00Z')), true);
 });
 
 test('cambio a fecha más próxima reduce el plazo inmediatamente', () => {

@@ -3,6 +3,7 @@ import { icon } from '../components/icons.js';
 import { normalizeText, escapeHtml } from '../utils/html.js';
 import { asDataUri } from '../utils/dishPhoto.js';
 import { dishVoteSummary } from '../utils/dishVotes.js';
+import { matchesDishTags, cleanTagSelection } from '../utils/dishTags.js';
 import { renderAdminDishImport } from './adminImport.js';
 
 const h = escapeHtml;
@@ -73,12 +74,6 @@ const recipeCollator = new Intl.Collator('es', { sensitivity: 'base', numeric: t
 const selectedRecipeTags = (state) => Array.isArray(state.recipeTags) ? state.recipeTags :
   (state.recipeTag ? [state.recipeTag] : []); // Compatibilidad con vistas antiguas.
 
-function hasRecipeTag(dish, tag) {
-  const normalized = normalizeText(tag);
-  if (normalized === 'saludable') return dish.approvedForHealthyMenu === true;
-  return (dish.tags || []).some(t => normalizeText(t) === normalized);
-}
-
 export function availableRecipeTags(dishes) {
   const distinct = new Map();
   for (const dish of dishes || []) {
@@ -95,7 +90,8 @@ export function availableRecipeTags(dishes) {
 
 export function matchingRecipeDishes(state) {
   const search = normalizeText(state.recipeQuery || '');
-  const filters = [...new Set(selectedRecipeTags(state).map(normalizeText))];
+  const filters = cleanTagSelection(selectedRecipeTags(state));
+  const excluded = cleanTagSelection(state.recipeExcludeTags);
   const matchAny = state.recipeMatchMode === 'any';
   const scope = state.recipeFilter || 'all';
   const admin = state.profile?.role === 'admin';
@@ -106,8 +102,7 @@ export function matchingRecipeDishes(state) {
     if (scope === 'mine' && d.createdBy !== state.user?.uid) return false;
     if (scope === 'healthy' && !d.approvedForHealthyMenu) return false; // Compatibilidad.
     if (!normalizeText(d.name).includes(search)) return false;
-    if (!filters.length) return true;
-    return matchAny ? filters.some(tag => hasRecipeTag(d, tag)) : filters.every(tag => hasRecipeTag(d, tag));
+    return matchesDishTags(d, filters, matchAny ? 'any' : 'all', excluded);
   });
   // Firestore devuelve el catálogo por fecha descendente; solo se ordena cuando se solicita.
   if (state.recipeSort === 'recent') return filtered;
@@ -145,12 +140,17 @@ export function renderRecipes(state) {
       <h3>${name}</h3><p>${h(authorName(dish, state))}</p>${labels}</div></button>${dishVoteControls(dish, state, true)}</article>`;
   }).join('');
   const tags = availableRecipeTags(state.dishes);
-  const selectedTags = [...new Set(selectedRecipeTags(state).map(normalizeText))];
+  const selectedTags = cleanTagSelection(selectedRecipeTags(state));
+  const excludedTags = cleanTagSelection(state.recipeExcludeTags);
   const tagButton = (tag, label) => {
     const active = selectedTags.includes(normalizeText(tag));
     return `<button type="button" data-action="recipe-tag" data-value="${h(tag)}" class="${active ? 'active' : ''}" aria-pressed="${active}">${active ? icon('check', 13) : ''}${h(label)}</button>`;
   };
-  const hasTags = selectedTags.length > 0;
+  const excludedButton = (tag, label) => {
+    const active = excludedTags.includes(normalizeText(tag));
+    return `<button type="button" data-action="recipe-exclude-tag" data-value="${h(tag)}" class="${active ? 'active is-excluded' : ''}" aria-pressed="${active}">${active ? icon('check', 13) : ''}${h(label)}</button>`;
+  };
+  const hasTags = selectedTags.length > 0 || excludedTags.length > 0;
   const hasMultipleTags = selectedTags.length > 1;
   return `${pageHeader('RECETARIO COMPARTIDO', 'Nuestros platillos', 'Las recetas que compartimos en familia.')}
   ${state.recipeNotice ? `<p class="notice-text" role="status">${h(state.recipeNotice)}</p>` : ''}
@@ -163,8 +163,9 @@ export function renderRecipes(state) {
     <div class="recipe-controls"><div class="segmented" aria-label="Ver platillos">${[['all','Todos'],['mine','Míos'],...(state.profile.role === 'admin' ? [['archived','Archivados']] : [])].map(([k,v]) => `<button type="button" data-action="recipe-filter" data-value="${k}" class="${state.recipeFilter === k ? 'selected' : ''}" aria-pressed="${state.recipeFilter === k}">${v}</button>`).join('')}</div>
     <label class="recipe-sort-control">Ordenar <select id="recipe-sort" aria-label="Ordenar recetas"><option value="az" ${!state.recipeSort || state.recipeSort === 'az' ? 'selected' : ''}>Nombre (A–Z)</option><option value="za" ${state.recipeSort === 'za' ? 'selected' : ''}>Nombre (Z–A)</option><option value="recent" ${state.recipeSort === 'recent' ? 'selected' : ''}>Más recientes</option></select></label>
     <div class="segmented compact-tabs" aria-label="Presentación"><button type="button" aria-label="Tarjetas" title="Tarjetas" data-action="recipe-view" data-value="cards" class="${state.recipeView === 'cards' ? 'selected' : ''}">${icon('grid', 18)}</button><button type="button" aria-label="Lista" title="Lista" data-action="recipe-view" data-value="list" class="${state.recipeView === 'list' ? 'selected' : ''}">${icon('list', 18)}</button></div></div></div>
-    <div class="recipe-filter-area"><div class="recipe-filter-heading"><strong>Etiquetas</strong>${hasTags ? `<button type="button" class="recipe-clear-filters" data-action="recipe-clear-tags">Quitar filtros (${selectedTags.length})</button>` : ''}</div>
-    <div class="dish-tag-filter" role="group" aria-label="Filtrar por varias etiquetas">${tagButton('saludable','Saludable')}${tagButton('postre','Postres')}${tagButton('bebida','Bebidas')}${tags.map(t => tagButton(t,t)).join('')}</div>
+    <div class="recipe-filter-area"><div class="recipe-filter-heading"><strong>Filtrar platillos</strong>${hasTags ? `<button type="button" class="recipe-clear-filters" data-action="recipe-clear-tags">Quitar filtros (${selectedTags.length + excludedTags.length})</button>` : ''}</div>
+    <p class="tag-filter-label">Incluir etiquetas</p><div class="dish-tag-filter" role="group" aria-label="Incluir etiquetas">${tagButton('saludable','Saludable')}${tagButton('postre','Postres')}${tagButton('bebida','Bebidas')}${tags.map(t => tagButton(t,t)).join('')}</div>
+    <p class="tag-filter-label">Excluir etiquetas</p><div class="dish-tag-filter exclude-tag-filter" role="group" aria-label="Excluir etiquetas">${excludedButton('saludable','Saludable')}${excludedButton('postre','Postres')}${excludedButton('bebida','Bebidas')}${tags.map(t => excludedButton(t,t)).join('')}</div>
     ${hasMultipleTags ? `<div class="recipe-match-controls"><span>Mostrar recetas que tengan:</span><div class="segmented" aria-label="Modo de combinación de etiquetas"><button type="button" data-action="recipe-match-mode" data-value="all" class="${state.recipeMatchMode !== 'any' ? 'selected' : ''}" aria-pressed="${state.recipeMatchMode !== 'any'}">Todas</button><button type="button" data-action="recipe-match-mode" data-value="any" class="${state.recipeMatchMode === 'any' ? 'selected' : ''}" aria-pressed="${state.recipeMatchMode === 'any'}">Cualquiera</button></div></div>` : ''}</div>
     <div class="recipes-intro"><strong>${matches.length} ${matches.length === 1 ? 'platillo' : 'platillos'}</strong></div>
     ${dishes.length ? `<div class="recipe-grid ${state.recipeView}">${cards}</div>` : '<div class="empty-result">No hay platillos que coincidan.</div>'}

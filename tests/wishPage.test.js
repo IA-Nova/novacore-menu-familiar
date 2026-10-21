@@ -51,3 +51,39 @@ test('el formulario explica que las notas son para quien prepara el antojo', () 
   assert.match(page, /Indicaciones para preparar el antojo/);
   assert.match(page, /Preparar la versión de tinga/);
 });
+
+
+test('el selector de antojo excluye Postre y Bebida sin quitar lo ya elegido', () => {
+  const state = model();
+  state.wishDraft = { selection:['crepas'], note:'', newNames:{} };
+  state.dishes = [
+    {id:'crepas',name:'Crepas',status:'active',tags:['postre']},
+    {id:'jamaica',name:'Agua de jamaica',status:'active',tags:['bebida']},
+    {id:'tinga',name:'Tinga',status:'active',tags:[]},
+  ];
+  state.wishExcludeTags = ['postre','bebida'];
+  const html = renderWishes(state);
+  assert.match(html, /data-action="wish-exclude-tag" data-value="postre" aria-pressed="true"/);
+  assert.match(html, /Mi selección \(1\/6\)/);
+  assert.match(html, /data-action="wish-remove-dish" data-value="crepas"/);
+  assert.doesNotMatch(html, /data-action="wish-toggle-dish" data-value="crepas"/);
+  assert.doesNotMatch(html, /data-action="wish-toggle-dish" data-value="jamaica"/);
+  assert.match(html, /data-action="wish-toggle-dish" data-value="tinga"/);
+});
+
+test('muestra el botón de edición cuando la elección no está programada aunque hubiera bloqueo anterior', () => {
+  const state = model();
+  state.cycle.lockedWishes = ['admin-uid'];
+  const html = renderWishes(state);
+  assert.match(html, /Elegir mi antojo/);
+  assert.doesNotMatch(html, /La elección de este ciclo ya está cerrada/);
+});
+
+test('permitir el primer antojo aun si el calendario reservó su fecha para mañana', () => {
+  const state = model();
+  const today = currentMexicoDate();
+  state.cycle.days[1].wishUserId = 'admin-uid';
+  state.cycle.days[1].date = today; // La UI no debe deducir un bloqueo para un antojo todavía pendiente.
+  state.cycle.wishDeadlines['admin-uid'] = new Date('2025-01-01T00:00:00Z');
+  assert.match(renderWishes(state), /Elegir mi antojo/);
+});

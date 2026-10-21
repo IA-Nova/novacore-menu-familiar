@@ -10,14 +10,19 @@ const h = escapeHtml;
 
 export function renderSuggestions(state) {
   const tags = Array.isArray(state.suggestionTags) ? state.suggestionTags : [];
+  const excludedTags = Array.isArray(state.suggestionExcludeTags) ? state.suggestionExcludeTags : [];
   const matchMode = state.suggestionMatchMode === 'any' ? 'any' : 'all';
-  const candidates = suggestionCandidates(state.dishes || [], tags, matchMode);
+  const candidates = suggestionCandidates(state.dishes || [], tags, matchMode, excludedTags);
   const selected = candidates.find(dish => dish.id === state.suggestionDishId);
   const preferencesReady = state.dishVotesLoaded === true &&
     (state.familyUsers || []).some(u => u.uid === state.user?.uid && u.status === 'active');
   const tagButton = (tag, label) => {
     const active = tags.some(value => normalizeText(value) === normalizeText(tag));
     return `<button type="button" data-action="suggestion-tag" data-value="${h(tag)}" aria-pressed="${active}" class="${active ? 'active' : ''}">${active ? icon('check', 14) : ''}${h(label)}</button>`;
+  };
+  const excludeButton = (tag, label) => {
+    const active = excludedTags.some(value => normalizeText(value) === normalizeText(tag));
+    return `<button type="button" data-action="suggestion-exclude-tag" data-value="${h(tag)}" aria-pressed="${active}" class="${active ? 'active is-excluded' : ''}">${active ? icon('check', 14) : ''}${h(label)}</button>`;
   };
   const customTags = availableRecipeTags(state.dishes);
   const summary = selected ? dishVoteSummary(selected.id, state.dishVotes, state.familyUsers, state.user?.uid) : null;
@@ -26,10 +31,11 @@ export function renderSuggestions(state) {
   return `${pageHeader('PREFERENCIAS DE LA FAMILIA', '¿Qué comemos hoy?',
     'Descubre un platillo al azar. Los favoritos de la familia tienen más oportunidades de salir.')}
   <section class="surface-card suggestion-filters" aria-label="Filtros del generador">
-    <div class="section-top"><h2>Elige qué se te antoja</h2>${tags.length ? '<button class="recipe-clear-filters" data-action="suggestion-clear" type="button">Quitar filtros</button>' : ''}</div>
-    <div class="dish-tag-filter" role="group" aria-label="Filtrar sugerencias por etiquetas">
+    <div class="section-top"><h2>Elige qué se te antoja</h2>${tags.length || excludedTags.length ? '<button class="recipe-clear-filters" data-action="suggestion-clear" type="button">Quitar filtros</button>' : ''}</div>
+    <p class="tag-filter-label">Incluir etiquetas</p><div class="dish-tag-filter" role="group" aria-label="Incluir etiquetas en sugerencias">
       ${tagButton('saludable', 'Saludable')}${tagButton('postre', 'Postre')}${tagButton('bebida', 'Bebida')}${customTags.map(tag => tagButton(tag, tag)).join('')}
     </div>
+    <p class="tag-filter-label">Excluir etiquetas</p><div class="dish-tag-filter exclude-tag-filter" role="group" aria-label="Excluir etiquetas de sugerencias">${excludeButton('saludable', 'Saludable')}${excludeButton('postre', 'Postre')}${excludeButton('bebida', 'Bebida')}${customTags.map(tag => excludeButton(tag, tag)).join('')}</div>
     ${tags.length > 1 ? `<div class="recipe-match-controls"><span>Buscar recetas que tengan:</span>
       <div class="segmented" aria-label="Cómo combinar los filtros">
         <button type="button" data-action="suggestion-match" data-value="all" class="${matchMode === 'all' ? 'selected' : ''}" aria-pressed="${matchMode === 'all'}">Todas</button>
@@ -56,6 +62,6 @@ export function renderSuggestions(state) {
     <h2>¿Qué se nos antoja preparar?</h2>
     <p>Pulsa «Sorpréndeme» y elegiremos un platillo para ti.</p>
   </section>` : `<section class="surface-card suggestion-placeholder" role="status"><h2>No encontramos recetas con esos filtros</h2>
-    <p>Prueba quitando alguna etiqueta o eligiendo «Cualquiera».</p></section>`}
+    <p>Prueba cambiando los filtros incluidos o excluidos.</p></section>`}
   <p class="suggestion-explanation">Las sugerencias tienen en cuenta los votos de los integrantes activos. Los Me gusta aumentan las posibilidades y los No me gusta las reducen, pero ningún platillo se descarta por sus votos.</p>`;
 }

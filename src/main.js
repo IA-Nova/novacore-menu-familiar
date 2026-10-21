@@ -44,10 +44,10 @@ const state = {
   phase: firebaseConfigured ? 'loading' : 'unavailable', user: null, profile: null, config: null,
   familyUsers: [], adminUsers: [], dishes: [], dishVotes: {}, dishVotesLoaded: false, voteBusyDishId: null, wishes: [], cycle: null,
   calendarView: 'week', weekIndex: 0, cycleOffset: 0,
-  recipeQuery: '', recipeFilter: 'all', recipeView: 'cards', recipeTags: [], recipeMatchMode: 'all', recipeSort: 'az', recipePageSize: 24,
-  suggestionTags: [], suggestionMatchMode: 'all', suggestionDishId: null,
+  recipeQuery: '', recipeFilter: 'all', recipeView: 'cards', recipeTags: [], recipeExcludeTags: [], recipeMatchMode: 'all', recipeSort: 'az', recipePageSize: 24,
+  suggestionTags: [], suggestionExcludeTags: [], suggestionMatchMode: 'all', suggestionDishId: null,
   recipeEditor: null, recipeDetailId: null, recipePhotoFile: null, recipeDraft: null, recipeNotice: '',
-  wishDraft: null, wishSearch: '', wishNotice: '',
+  wishDraft: null, wishSearch: '', wishExcludeTags: [], wishNotice: '',
   calendarMode: 'meal', calendarOrganizeSource: null, calendarOrganizeRevision: null, calendarEditor: null, calendarNotice: '', templateDraft: null,
   recentCycles: [], historyLoading: false, historyError: '', backupPreview: null, backupBusy: false,
   backupProgress: '', backupError: '', backupFileName: '',
@@ -71,12 +71,16 @@ function disconnectFamily() {
   currentCycleId = '';
   state.familyUsers = []; state.adminUsers = []; state.dishes = []; state.dishVotes = {}; state.dishVotesLoaded = false; state.voteBusyDishId = null; state.wishes = []; state.config = null; state.cycle = null;
   state.thumbnails = {}; state.fullDishPhoto = null; state.recipeEditor = null; state.recipeDetailId = null; state.recipeDraft = null;
-  state.wishDraft = null; state.wishSearch = ''; state.wishNotice = '';
+  state.wishDraft = null; state.wishSearch = ''; state.wishExcludeTags = []; state.wishNotice = '';
   state.calendarEditor = null; state.calendarOrganizeSource = null; state.calendarOrganizeRevision = null; state.calendarNotice = ''; state.templateDraft = null;
   state.backupPreview = null; state.backupBusy = false; state.backupProgress = ''; state.backupError = ''; state.backupFileName = '';
   state.recentCycles = []; state.historyLoading = false; state.historyError = '';
   state.dishImportOpen = false; state.dishImportText = ''; state.dishImportPreview = null; state.dishImportBusy = false; state.dishImportError = ''; state.dishImportMessage = '';
-  state.suggestionTags = []; state.suggestionMatchMode = 'all'; state.suggestionDishId = null;
+  state.suggestionTags = []; state.suggestionExcludeTags = []; state.suggestionMatchMode = 'all'; state.suggestionDishId = null;
+}
+function canEditCurrentWish() {
+  const myWish = state.wishes.find(wish => wish.userId === state.user?.uid);
+  return wishCanEdit(state.cycle, state.user?.uid, new Date(), myWish?.status || 'pending');
 }
 function routeName() { return routeFromHash(location.hash); }
 function ensureCalendarUrl() {
@@ -263,13 +267,20 @@ document.addEventListener('click', async (event) => {
   if (action === 'suggestion-tag') {
     const tag = normalizeText(value);
     if (!tag) return;
-    state.suggestionTags = state.suggestionTags.some(item => normalizeText(item) === tag)
-      ? state.suggestionTags.filter(item => normalizeText(item) !== tag)
-      : [...state.suggestionTags, tag];
+    const included = state.suggestionTags.includes(tag);
+    state.suggestionTags = included ? state.suggestionTags.filter(item => item !== tag) : [...state.suggestionTags, tag];
+    if (!included) state.suggestionExcludeTags = state.suggestionExcludeTags.filter(item => item !== tag);
+    state.suggestionDishId = null; render(); return;
+  }
+  if (action === 'suggestion-exclude-tag') {
+    const tag = normalizeText(value); if (!tag) return;
+    const excluded = state.suggestionExcludeTags.includes(tag);
+    state.suggestionExcludeTags = excluded ? state.suggestionExcludeTags.filter(item => item !== tag) : [...state.suggestionExcludeTags, tag];
+    if (!excluded) state.suggestionTags = state.suggestionTags.filter(item => item !== tag);
     state.suggestionDishId = null; render(); return;
   }
   if (action === 'suggestion-clear') {
-    state.suggestionTags = []; state.suggestionMatchMode = 'all'; state.suggestionDishId = null;
+    state.suggestionExcludeTags = []; state.suggestionTags = []; state.suggestionExcludeTags = []; state.suggestionMatchMode = 'all'; state.suggestionDishId = null;
     render(); return;
   }
   if (action === 'suggestion-match' && ['all', 'any'].includes(value)) {
@@ -279,6 +290,7 @@ document.addEventListener('click', async (event) => {
   if (action === 'suggestion-generate') {
     if (!state.dishVotesLoaded || !(state.familyUsers || []).some(u => u.uid === state.user?.uid && u.status === 'active')) return;
     const choice = pickFamilySuggestion({ dishes: state.dishes, tags: state.suggestionTags,
+      excludedTags: state.suggestionExcludeTags,
       matchMode: state.suggestionMatchMode, votesByDish: state.dishVotes,
       familyUsers: state.familyUsers, previousId: state.suggestionDishId });
     state.suggestionDishId = choice?.dish.id || null;
@@ -462,16 +474,25 @@ document.addEventListener('click', async (event) => {
     render(); return;
   }
   if (action === 'wish-edit') {
-    if (!wishCanEdit(state.cycle, state.user.uid)) return;
+    if (!canEditCurrentWish()) return;
     const wish = state.wishes.find(w => w.userId === state.user.uid);
     state.wishDraft = { selection: wish?.status === 'selected' ? wish.dishes.map(d => d.dishId) : [],
       note: wish?.status === 'selected' ? wish.note || '' : '', newNames: {} };
-    state.wishNotice = ''; state.wishSearch = '';
+    state.wishNotice = ''; state.wishSearch = ''; state.wishExcludeTags = [];
     render(); document.getElementById('wish-editor')?.scrollIntoView({ block: 'start', behavior: 'smooth' }); return;
   }
-  if (action === 'wish-cancel') { state.wishDraft = null; state.wishSearch = ''; render(); return; }
+  if (action === 'wish-cancel') { state.wishDraft = null; state.wishSearch = ''; state.wishExcludeTags = []; render(); return; }
+  if (action === 'wish-exclude-tag' && state.wishDraft) {
+    const tag = normalizeText(value); if (!tag) return;
+    state.wishExcludeTags = state.wishExcludeTags.includes(tag)
+      ? state.wishExcludeTags.filter(item => item !== tag) : [...state.wishExcludeTags, tag];
+    state.recipePageSize = 24; render(); return;
+  }
+  if (action === 'wish-clear-excludes' && state.wishDraft) {
+    state.wishExcludeTags = []; state.recipePageSize = 24; render(); return;
+  }
   if (action === 'wish-toggle-dish' || action === 'wish-remove-dish') {
-    if (!state.wishDraft || !wishCanEdit(state.cycle, state.user.uid)) return;
+    if (!state.wishDraft || !canEditCurrentWish()) return;
     const selected = state.wishDraft.selection;
     if (selected.includes(value)) state.wishDraft.selection = selected.filter(id => id !== value);
     else {
@@ -483,7 +504,7 @@ document.addEventListener('click', async (event) => {
     state.wishNotice = ''; render(); return;
   }
   if (action === 'wish-decline') {
-    if (!state.wishDraft || !wishCanEdit(state.cycle, state.user.uid)) return;
+    if (!state.wishDraft || !canEditCurrentWish()) return;
     if (!window.confirm('¿Confirmas que no quieres antojo en este ciclo?')) return;
     button.disabled = true;
     try {
@@ -538,12 +559,20 @@ document.addEventListener('click', async (event) => {
   if (action === 'recipe-tag') {
     const tag = normalizeText(value);
     if (!tag) return;
-    state.recipeTags = state.recipeTags.includes(tag)
-      ? state.recipeTags.filter(item => item !== tag) : [...state.recipeTags, tag];
+    const included = state.recipeTags.includes(tag);
+    state.recipeTags = included ? state.recipeTags.filter(item => item !== tag) : [...state.recipeTags, tag];
+    if (!included) state.recipeExcludeTags = state.recipeExcludeTags.filter(item => item !== tag);
+    state.recipePageSize = 24; render(); return;
+  }
+  if (action === 'recipe-exclude-tag') {
+    const tag = normalizeText(value); if (!tag) return;
+    const excluded = state.recipeExcludeTags.includes(tag);
+    state.recipeExcludeTags = excluded ? state.recipeExcludeTags.filter(item => item !== tag) : [...state.recipeExcludeTags, tag];
+    if (!excluded) state.recipeTags = state.recipeTags.filter(item => item !== tag);
     state.recipePageSize = 24; render(); return;
   }
   if (action === 'recipe-clear-tags') {
-    state.recipeTags = []; state.recipeMatchMode = 'all'; state.recipePageSize = 24; render(); return;
+    state.recipeTags = []; state.recipeExcludeTags = []; state.recipeMatchMode = 'all'; state.recipePageSize = 24; render(); return;
   }
   if (action === 'recipe-match-mode' && ['all', 'any'].includes(value)) {
     state.recipeMatchMode = value; state.recipePageSize = 24; render(); return;
@@ -596,7 +625,7 @@ document.addEventListener('submit', async (event) => {
       state.templateDraft = null; state.notice = 'Distribución predeterminada actualizada.'; render();
     }
     else if (type === 'wish-quick-dish') {
-      if (!state.wishDraft || !wishCanEdit(state.cycle, state.user.uid)) throw new Error('Tu antojo ya no se puede editar.');
+      if (!state.wishDraft || !canEditCurrentWish()) throw new Error('Tu antojo ya no se puede editar.');
       const clean = validateDish({ name: data.name });
       const duplicated = duplicateDishNames(state.dishes, clean.name);
       if (duplicated.length && !window.confirm(`Ya existe «${clean.name}». ¿Quieres agregar un nuevo platillo?`)) return;
@@ -609,7 +638,7 @@ document.addEventListener('submit', async (event) => {
       render();
     }
     else if (type === 'wish') {
-      if (!state.wishDraft || !wishCanEdit(state.cycle, state.user.uid)) throw new Error('Tu antojo ya no se puede editar.');
+      if (!state.wishDraft || !canEditCurrentWish()) throw new Error('Tu antojo ya no se puede editar.');
       await saveMyWish({ cycleId: state.cycle.startDate, uid: state.user.uid,
         selection: state.wishDraft.selection, dishes: state.dishes, newNames: state.wishDraft.newNames,
         note: state.wishDraft.note });

@@ -1,17 +1,10 @@
-import { normalizeText } from './html.js';
+import { matchesDishTags } from './dishTags.js';
 import { dishVoteSummary } from './dishVotes.js';
 
 // Las etiquetas se combinan igual que en el recetario, siempre sobre platillos activos.
-export function suggestionCandidates(dishes = [], tags = [], matchMode = 'all') {
-  const filters = [...new Set((Array.isArray(tags) ? tags : []).map(normalizeText).filter(Boolean))];
-  return (dishes || []).filter(dish => {
-    if (dish.status !== 'active') return false;
-    const hasTag = tag => tag === 'saludable'
-      ? dish.approvedForHealthyMenu === true
-      : (dish.tags || []).some(value => normalizeText(value) === tag);
-    if (!filters.length) return true;
-    return matchMode === 'any' ? filters.some(hasTag) : filters.every(hasTag);
-  });
+export function suggestionCandidates(dishes = [], tags = [], matchMode = 'all', excludedTags = []) {
+  return (dishes || []).filter(dish => dish.status === 'active' &&
+    matchesDishTags(dish, tags, matchMode, excludedTags));
 }
 
 // Una opinión positiva aumenta las oportunidades y una negativa las reduce.
@@ -22,9 +15,9 @@ export function suggestionWeight({ likes = 0, dislikes = 0 } = {}) {
 
 // Selección ponderada sin escrituras en Firebase. Evita repetir inmediatamente
 // la misma receta cuando hay al menos dos candidatas disponibles.
-export function pickFamilySuggestion({ dishes = [], tags = [], matchMode = 'all',
+export function pickFamilySuggestion({ dishes = [], tags = [], excludedTags = [], matchMode = 'all',
   votesByDish = {}, familyUsers = [], previousId = null } = {}, random = Math.random) {
-  const candidates = suggestionCandidates(dishes, tags, matchMode);
+  const candidates = suggestionCandidates(dishes, tags, matchMode, excludedTags);
   if (!candidates.length) return null;
   const pool = candidates.length > 1 && previousId
     ? candidates.filter(dish => dish.id !== previousId) : candidates;

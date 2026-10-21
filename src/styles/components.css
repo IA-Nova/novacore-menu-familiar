@@ -159,3 +159,10 @@
 .recipe-card.compact>.dish-votes-compact{padding:8px 12px 9px}
 .dish-detail .dish-votes{margin-top:2px}
 @media(max-width:520px){.dish-vote-button{padding:6px 10px;min-height:36px}}
+
+/* Inclusion and exclusion filters share chips but have distinct selected states. */
+.tag-filter-label { margin: 12px 0 0; font-size: .79rem; font-weight: 700; color: var(--color-muted); }
+.exclude-tag-filter button.active.is-excluded,
+.recipe-filter-area .exclude-tag-filter button.active.is-excluded { background: #e9dff3; color: #514163; border-color: #a58cbc; }
+.wish-exclude-area { margin: 12px 0; padding: 12px; background: #fbf9fd; border: 1px solid var(--color-border); border-radius: 12px; }
+.wish-exclude-area .dish-tag-filter { margin-top: 10px; }

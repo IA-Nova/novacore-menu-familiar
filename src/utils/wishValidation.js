@@ -26,15 +26,26 @@ export function endOfCycleExclusive(startDate) { return mexicoMidnightUtc(addDay
 
 export function wishEditDeadline(cycle, uid) {
   if (!cycle || !cycle.endAt) return null;
-  const deadline = cycle.wishDeadlines?.[uid] ?? cycle.endAt;
-  if (deadline?.toDate) return deadline.toDate(); // Firebase Timestamp
-  return new Date(deadline);
+  const plannedDate = cycle.days?.find(day => day.type === 'wish' && day.wishUserId === uid)?.date;
+  if (plannedDate) return mexicoMidnightUtc(addDays(plannedDate, -1));
+  // Dates persisted by older versions are midnights on the scheduled day.
+  const raw = cycle.wishDeadlines?.[uid];
+  if (raw) {
+    const stored = raw.toDate ? raw.toDate() : new Date(raw);
+    return new Date(stored.getTime() - 86400000);
+  }
+  const end = cycle.endAt;
+  return end?.toDate ? end.toDate() : new Date(end);
 }
 
-export function wishCanEdit(cycle, uid, now = new Date()) {
+export function wishCanEdit(cycle, uid, now = new Date(), wishStatus = 'selected') {
+  if (!cycle?.endAt) return false;
+  const end = cycle.endAt?.toDate ? cycle.endAt.toDate() : new Date(cycle.endAt);
+  if (!Number.isFinite(end.getTime()) || now.getTime() >= end.getTime()) return false;
+  // A pending or declined choice is not "Programado", even if a date has been reserved.
+  if (wishStatus !== 'selected') return true;
   const deadline = wishEditDeadline(cycle, uid);
-  if (!deadline || Number.isNaN(deadline.getTime())) return false;
-  return !(cycle.lockedWishes || []).includes(uid) && now.getTime() < deadline.getTime();
+  return Boolean(deadline && !Number.isNaN(deadline.getTime()) && now.getTime() < deadline.getTime());
 }
 
 export function normalizeWishSelection(dishIds, dishes, newNames = {}) {

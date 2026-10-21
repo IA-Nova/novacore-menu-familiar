@@ -28,3 +28,6 @@
 .suggestion-explanation{color:var(--color-muted);font-size:.78rem;line-height:1.65;max-width:760px;margin:17px 0}
 @media(max-width:760px){.suggestion-result{grid-template-columns:1fr;gap:18px}.suggestion-result-photo,.suggestion-result-photo .food-illustration{min-height:220px}.suggestion-result-photo .dish-photo{min-height:220px;max-height:320px}.suggestion-filter-footer .btn{flex:1}}
 @media(max-width:420px){.suggestion-filters .dish-tag-filter button{padding:8px 11px;font-size:.77rem}}
+
+.suggestion-filters .tag-filter-label { margin: 1px 0 -7px; }
+.suggestion-filters .exclude-tag-filter button.active.is-excluded { background: #e9dff3; color: #514163; border-color: #a58cbc; }

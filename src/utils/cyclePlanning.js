@@ -54,32 +54,15 @@ export function editPlannedDay(cycle, date, draft, familyUsers = []) {
   return assertPlanningCycle({ ...cycle, days });
 }
 
-function timestampToMillis(ts) {
-  if (ts && typeof ts.toMillis === 'function') return ts.toMillis();
-  return ts instanceof Date ? ts.getTime() : typeof ts === 'string' ? new Date(ts).getTime() : NaN;
-}
-
 /** Persist the server-checked cutoffs on the cycle, not on wish documents. */
 export function withPlanningDeadlines(previous, next, now = new Date()) {
   assertPlanningCycle(next);
-  const oldAssigned = new Map((previous?.days || []).filter(d => d.type === 'wish' && d.wishUserId).map(d => [d.wishUserId, d.date]));
-  const newAssigned = new Map(next.days.filter(d => d.type === 'wish' && d.wishUserId).map(d => [d.wishUserId, d.date]));
-  const deadlines = {};
-  const locked = new Set(previous?.lockedWishes || []);
-  const oldDeadlines = previous?.wishDeadlines || {};
-  for (const [uid, date] of oldAssigned) {
-    const oldDeadline = timestampToMillis(oldDeadlines[uid]);
-    const inferredOldDeadline = mexicoMidnightUtc(date).getTime();
-    if (now.getTime() >= (Number.isFinite(oldDeadline) ? oldDeadline : inferredOldDeadline)) locked.add(uid);
-  }
-  for (const [uid, date] of newAssigned) {
-    const cutoff = mexicoMidnightUtc(date);
-    deadlines[uid] = cutoff;
-    if (cutoff.getTime() <= now.getTime()) locked.add(uid);
-  }
-  // For an unassigned user the rules use the original cycle endAt, unless locked.
+  const assigned = next.days.filter(day => day.type === 'wish' && day.wishUserId);
+  const deadlines = Object.fromEntries(assigned.map(day => [day.wishUserId, mexicoMidnightUtc(day.date)]));
+  // Keep finalized declines recorded for administration, but they no longer
+  // block a future edit when a member has no imminent scheduled date.
   return { ...next, endAt: previous?.endAt || endOfCycleExclusive(next.startDate),
-    wishDeadlines: deadlines, lockedWishes: [...locked] };
+    wishDeadlines: deadlines, lockedWishes: previous?.lockedWishes || [] };
 }
 
 export function changeRequiresHistoryConfirmation(cycle, affectedDates, today) {

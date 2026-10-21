@@ -13,11 +13,14 @@ test('el cálculo horario también contempla cambios históricos de huso horario
 test('las fechas administradas determinan límite editable y no el reloj del navegador', () => {
   const endAt = endOfCycleExclusive('2026-10-19');
   const cycle = { endAt, wishDeadlines: { 'u1': new Date('2026-10-23T06:00:00Z') }, lockedWishes: [] };
-  assert.equal(wishEditDeadline(cycle,'u1').toISOString(), '2026-10-23T06:00:00.000Z');
-  assert.equal(wishCanEdit(cycle, 'u1', new Date('2026-10-23T05:59:59Z')), true);
-  assert.equal(wishCanEdit(cycle, 'u1', new Date('2026-10-23T06:00:00Z')), false);
+  assert.equal(wishEditDeadline(cycle,'u1').toISOString(), '2026-10-22T06:00:00.000Z');
+  assert.equal(wishCanEdit(cycle, 'u1', new Date('2026-10-22T05:59:59Z')), true);
+  assert.equal(wishCanEdit(cycle, 'u1', new Date('2026-10-22T06:00:00Z')), false);
   assert.equal(wishCanEdit(cycle, 'u2', new Date('2026-11-02T06:00:00Z')), false);
-  assert.equal(wishCanEdit({ ...cycle, lockedWishes: ['u1'] },'u1', new Date('2026-10-20T00:00:00Z')), false);
+  assert.equal(wishCanEdit({ ...cycle, lockedWishes: ['u2'] },'u2', new Date('2026-10-20T00:00:00Z')), true);
+  assert.equal(wishCanEdit(cycle, 'u1', new Date('2026-10-23T18:00:00Z'), 'pending'), true);
+  const rescheduled = { ...cycle, days: [{ type: 'wish', date: '2026-10-30', wishUserId: 'u1' }], lockedWishes: ['u1'] };
+  assert.equal(wishCanEdit(rescheduled, 'u1', new Date('2026-10-25T00:00:00Z')), true);
 });
 test('un antojo acepta varios platillos activos, sin repetirlos', () => {
   const dishes = [{id:'a',name:'Arroz',status:'active'},{id:'b',name:'Papas',status:'active'}];

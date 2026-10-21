@@ -1,9 +1,11 @@
 // Ejecutar sólo con Firebase Emulator Suite en 127.0.0.1:8080.
 import { before, after, test } from 'node:test';
+import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { initializeTestEnvironment, assertFails, assertSucceeds } from '@firebase/rules-unit-testing';
+import { currentMexicoDate, addDays } from '../src/utils/dates.js';
+import { mexicoMidnightUtc } from '../src/utils/wishValidation.js';
 import { doc, getDoc, setDoc, updateDoc, deleteDoc, deleteField, FieldPath, serverTimestamp, collection, getDocs, query, where, writeBatch } from 'firebase/firestore';
-import assert from 'node:assert/strict';
 let env;
 const authUser = (uid, email) => env.authenticatedContext(uid, { email }).firestore();
 before(async () => {
@@ -192,9 +194,23 @@ test('no se aceptan platillos inexistentes, archivados, notas excesivas o duplic
   const base = wishData('active-uid');
   await assertFails(setDoc(path, { ...base, dishes: [base.dishes[0],base.dishes[0]] }));
 });
-test('vence plazo según timestamp administrado, no según cliente', async () => {
+test('primera selección permitida y edición bloqueada tras el plazo administrado', async () => {
   const owner = authUser('active-uid','ana@users.novacore');
-  await assertFails(setDoc(doc(owner,'cycles/2030-11-11/wishes/active-uid'), wishData('active-uid')));
+  const path = 'cycles/2030-11-11/wishes/active-uid';
+  const wishRef = doc(owner, path);
+  try {
+    // El primer antojo se permite aunque la fecha programada sea inminente.
+    await assertSucceeds(setDoc(wishRef, wishData('active-uid')));
+    // Una elección ya programada no puede editarse después del límite.
+    await assertFails(updateDoc(wishRef, {
+      note: 'Modificar después del plazo', updatedAt: serverTimestamp(),
+    }));
+  } finally {
+    // No contaminar la prueba posterior de restauración histórica.
+    await env.withSecurityRulesDisabled(async (context) => {
+      await deleteDoc(doc(context.firestore(), path));
+    });
+  }
 });
 test('renuncia propia permitida mientras el plazo sigue abierto', async () => {
   const owner = authUser('active-uid','ana@users.novacore');
@@ -328,4 +344,38 @@ test('votos requieren receta activa, valor válido, marca de tiempo y cuenta act
   await assertSucceeds(setDoc(doc(admin, 'dishes', 'plato-archivado'), dishDocument('admin-uid', 'Platillo archivado')));
   await assertSucceeds(updateDoc(doc(admin, 'dishes', 'plato-archivado'), { status: 'archived', updatedAt: serverTimestamp() }));
   await assertFails(setDoc(doc(ana, 'dishVotes', 'plato-archivado'), { votes: { 'active-uid': 'like' }, updatedAt: serverTimestamp() }));
+});
+
+
+test('solo se bloquea el antojo programado para mañana o antes; sin asignación permite editar', async () => {
+  const today = currentMexicoDate();
+  const scheduledLater = addDays(today, 4);
+  const scheduledTomorrow = addDays(today, 1);
+  const endAt = mexicoMidnightUtc(addDays(today, 14));
+  const cycleId = today;
+  const cycleRef = doc(env.unauthenticatedContext().firestore(), 'cycles', cycleId);
+  await env.withSecurityRulesDisabled(async context => {
+    await setDoc(doc(context.firestore(), 'cycles', cycleId), {
+      startDate: cycleId, endDate: addDays(today, 13), days: [],
+      endAt, wishDeadlines: { 'active-uid': mexicoMidnightUtc(scheduledLater) },
+      lockedWishes: ['active-uid'], revision: 1,
+    });
+  });
+  const userDb = authUser('active-uid', 'ana@users.novacore');
+  const wishRef = doc(userDb,'cycles',cycleId,'wishes','active-uid');
+  await assertSucceeds(setDoc(wishRef, wishData('active-uid')));
+  const adminDb = authUser('admin-uid','admin@users.novacore');
+  await assertSucceeds(updateDoc(doc(adminDb,'cycles',cycleId), {
+    wishDeadlines: { 'active-uid': mexicoMidnightUtc(scheduledTomorrow) }, updatedAt: serverTimestamp(),
+  }));
+  await assertFails(updateDoc(wishRef, { note: 'El jueves', updatedAt: serverTimestamp() }));
+  // Initial selection is still allowed if a date is reserved, but there was no prior choice.
+  const newWish = doc(authUser('other-active-uid', 'maria@users.novacore'), 'cycles', cycleId, 'wishes', 'other-active-uid');
+  await assertSucceeds(updateDoc(doc(adminDb,'cycles',cycleId), {
+    wishDeadlines: { 'active-uid': mexicoMidnightUtc(scheduledTomorrow),
+      'other-active-uid': mexicoMidnightUtc(scheduledTomorrow) }, updatedAt: serverTimestamp(),
+  }));
+  await assertSucceeds(setDoc(newWish, wishData('other-active-uid')));
+  await assertSucceeds(updateDoc(doc(adminDb,'cycles',cycleId), { wishDeadlines: {}, updatedAt: serverTimestamp() }));
+  await assertSucceeds(updateDoc(wishRef, { note: 'Puedo elegir sin fecha asignada', updatedAt: serverTimestamp() }));
 });
